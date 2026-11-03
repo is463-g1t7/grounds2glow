@@ -1,55 +1,320 @@
 @import "tailwindcss";
 
-/*
- * Campus-map design system — sampled off public/smu-campus-map.jpeg:
- * cream paper, ink-charcoal roads, leaf-tree green, ochre footpaths,
- * terracotta rooftops. SMU navy kept as brand (glass-tower blue).
- * Light-only theme: no dark mode.
- */
 @theme {
-  --color-paper: #f4efe1;
-  --color-card: #fffdf6;
-  --color-ink: #33383d;
-  --color-muted: #6e746a;
-  --color-line: #e2d9bf;
-  --color-sand: #eae2cb;
-  --color-brand: #0e2a47;
-  --color-gold: #c5a253;
-  --color-leaf: #4c7f3c;
-  --color-pine: #3a612d;
-  --color-tint-leaf: #e3edd5;
-  --color-harvest: #c07f16;
-  --color-ochre: #8f6114;
-  --color-tint-ochre: #f3e4c3;
-  --color-roof: #b23c26;
-  --color-ember: #9c3f27;
-  --color-tint-ember: #f5dfd3;
+  --font-sans: var(--font-franklin), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-oswald), "Arial Narrow", sans-serif;
+  --font-mono: "Courier New", ui-monospace, monospace;
 
-  /* Cleaner app: pass scanner + auto-capture camera */
-  --animate-scanline: scanline 2.2s ease-in-out infinite;
-  --animate-shutter: shutter 0.5s ease-out forwards;
-  --animate-pass-in: pass-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  --animate-rise: rise 0.35s ease-out both;
-  /* Selected campus-map pin */
-  --animate-pin-blink: pin-blink 1.1s ease-in-out infinite;
+  --color-smu-navy: #141b4d;
+  --color-smu-navy-deep: #0d1238;
+  --color-smu-navy-soft: #232c6b;
+  --color-smu-gold: #8a704c;
+  --color-smu-gold-dark: #69553a;
+  --color-smu-gold-light: #b49a76;
+  --color-smu-cream: #e8e2da;
+  --color-smu-cream-light: #f3eee7;
+  --color-smu-cream-dark: #dcd5c9;
+  --color-smu-ink: #000000;
+  --color-smu-muted: #555555;
+  --color-smu-line: #d8d0c4;
+  --color-smu-blue: #3860be;
+  --color-smu-success: #3eb33e;
+  --color-smu-danger: #d93c36;
+  --color-smu-warning: #e6a422;
 
-  @keyframes pin-blink {
-    0%,
-    100% {
-      opacity: 1;
-      box-shadow:
-        0 0 0 3px #fff,
-        0 0 0 6px var(--color-brand);
+  --radius-card: 4px;
+  --radius-button: 4px;
+  --radius-md: 4px;
+
+  --shadow-card: 0 1px 2px rgb(20 27 77 / 0.05);
+  --shadow-cta: 2px 2px 16px rgb(0 0 0 / 0.2);
+  --shadow-lift: 0 10px 24px -14px rgb(20 27 77 / 0.3);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white font-sans text-black antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-smu-gold);
+    color: #fff;
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-smu-gold);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
     }
-    50% {
-      opacity: 0.4;
-      box-shadow:
-        0 0 0 3px #fff,
-        0 0 0 16px rgb(14 42 71 / 0);
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .container-smu {
+    width: 100%;
+    max-width: 1400px;
+    margin-inline: auto;
+    padding-inline: 20px;
+  }
+
+  .section-pad {
+    padding-block: 80px;
+  }
+
+  @media (max-width: 768px) {
+    .section-pad {
+      padding-block: 56px;
     }
   }
 
-  @keyframes scanline {
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: 17.6px;
+    line-height: 22px;
+    font-weight: 400;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .display-h1 {
+    font-family: var(--font-display);
+    font-size: 48px;
+    line-height: 60px;
+    font-weight: 300;
+    letter-spacing: normal;
+  }
+
+  .display-h2 {
+    font-family: var(--font-display);
+    font-size: 40px;
+    line-height: 50px;
+    font-weight: 400;
+  }
+
+  .display-h3 {
+    font-family: var(--font-display);
+    font-size: 32px;
+    line-height: 40px;
+    font-weight: 400;
+  }
+
+  @media (max-width: 768px) {
+    .display-h1 {
+      font-size: 36px;
+      line-height: 44px;
+    }
+    .display-h2 {
+      font-size: 32px;
+      line-height: 40px;
+    }
+    .display-h3 {
+      font-size: 26px;
+      line-height: 34px;
+    }
+  }
+
+  .lead {
+    font-size: 20px;
+    line-height: 30px;
+  }
+
+  .cta {
+    @apply inline-flex items-center justify-center gap-2 rounded-[4px] border border-transparent px-4 py-2 font-display text-[16px] font-normal uppercase leading-6 tracking-[0.01em] transition-all duration-300;
+    box-shadow: var(--shadow-cta);
+  }
+
+  .cta-gold {
+    @apply border-smu-gold bg-smu-gold text-white hover:border-[#bfbfbf] hover:bg-white hover:text-smu-gold;
+  }
+
+  .cta-navy {
+    @apply border-smu-navy bg-smu-navy text-white hover:border-[#bfbfbf] hover:bg-white hover:text-smu-navy;
+  }
+
+  .cta-outline {
+    @apply border-smu-navy bg-transparent text-smu-navy shadow-none hover:bg-smu-navy hover:text-white;
+  }
+
+  .cta-outline-light {
+    @apply border-white bg-transparent text-white shadow-none hover:bg-white hover:text-smu-navy;
+  }
+
+  .cta-sm {
+    @apply px-3 py-1.5 text-[13px] leading-5;
+  }
+
+  .btn-smu {
+    @apply inline-flex items-center justify-center gap-2 rounded-[4px] border px-4 py-2 font-sans text-[16px] font-semibold leading-6 transition-all duration-300;
+  }
+
+  .btn-smu-gold {
+    @apply border-smu-gold bg-smu-gold text-white hover:border-[#bfbfbf] hover:bg-white hover:text-smu-gold;
+  }
+
+  .btn-smu-outline {
+    @apply border-smu-navy bg-transparent text-smu-navy hover:bg-smu-navy hover:text-white;
+  }
+
+  .btn-smu-light {
+    @apply border-white bg-transparent text-white hover:bg-white hover:text-smu-navy;
+  }
+
+  .btn-smu-sm {
+    @apply px-3 py-1.5 text-[13.5px] leading-5;
+  }
+
+  .text-link {
+    @apply inline-flex items-center gap-1.5 font-semibold text-smu-gold-dark transition-colors hover:text-smu-navy;
+  }
+
+  .card-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lift;
+  }
+
+  .rule-top {
+    @apply border-t border-black/10;
+  }
+
+  .prose-smu {
+    @apply text-[15px] leading-6 text-black/85;
+  }
+
+  .prose-smu p {
+    @apply mb-3 last:mb-0;
+  }
+
+  .prose-smu strong {
+    @apply font-semibold text-smu-navy;
+  }
+
+  .prose-smu ul {
+    @apply mb-3 list-disc space-y-1.5 pl-5;
+  }
+
+  .prose-smu ol {
+    @apply mb-3 list-decimal space-y-1.5 pl-5;
+  }
+
+  .prose-smu a {
+    @apply font-semibold text-smu-gold underline decoration-smu-gold/40 underline-offset-2 hover:text-smu-navy;
+  }
+
+  .prose-smu h3 {
+    @apply mb-2 mt-4 font-display text-[20px] font-normal leading-7 text-smu-navy first:mt-0;
+  }
+
+  .prose-smu code {
+    @apply rounded bg-smu-cream px-1.5 py-0.5 font-mono text-[13px] text-smu-navy;
+  }
+
+  .prose-smu table {
+    @apply mb-3 w-full border-collapse text-left text-[13px];
+  }
+
+  .prose-smu th {
+    @apply border-b border-smu-line px-2 py-1.5 font-semibold text-smu-navy;
+  }
+
+  .prose-smu td {
+    @apply border-b border-smu-line/70 px-2 py-1.5;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(138 112 76 / 0.4) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(138 112 76 / 0.4);
+    border-radius: 999px;
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgb(20 27 77 / 0.45) 0%,
+      rgb(20 27 77 / 0.9) 50%,
+      rgb(20 27 77 / 0.45) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 1.8s linear infinite;
+  }
+
+  @keyframes shimmer {
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  .fade-up {
+    animation: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .hero-shade {
+    background:
+      linear-gradient(90deg, rgb(13 18 56 / 0.88) 0%, rgb(13 18 56 / 0.62) 46%, rgb(13 18 56 / 0.3) 100%),
+      linear-gradient(0deg, rgb(13 18 56 / 0.55) 0%, transparent 45%);
+  }
+
+  .angled-photo {
+    clip-path: polygon(0 0, 100% 0, 100% 82%, 82% 100%, 0 100%);
+  }
+
+  .campus-pin {
+    translate: -50% -50%;
+  }
+
+  @media (max-width: 1023px) {
+    .campus-pin {
+      translate: calc(-50% + var(--nx, 0px)) calc(-50% + var(--ny, 0px));
+    }
+  }
+
+  .scanline {
+    animation: smu-scanline 2.2s ease-in-out infinite;
+  }
+
+  @keyframes smu-scanline {
     0%,
     100% {
       top: 8%;
@@ -58,7 +323,12 @@
       top: 88%;
     }
   }
-  @keyframes shutter {
+
+  .shutter {
+    animation: smu-shutter 0.5s ease-out forwards;
+  }
+
+  @keyframes smu-shutter {
     from {
       opacity: 0.95;
     }
@@ -66,98 +336,4 @@
       opacity: 0;
     }
   }
-  @keyframes pass-in {
-    from {
-      transform: translateY(70%) rotate(-6deg) scale(0.9);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0) rotate(0) scale(1);
-      opacity: 1;
-    }
-  }
-  @keyframes rise {
-    from {
-      transform: translateY(6px);
-      opacity: 0;
-    }
-    to {
-      transform: translateY(0);
-      opacity: 1;
-    }
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  ::before,
-  ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-@theme inline {
-  --color-background: var(--color-card);
-  --color-foreground: var(--color-ink);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-dm-serif), Georgia, serif;
-}
-
-body {
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-button:focus-visible,
-select:focus-visible,
-input:focus-visible,
-a:focus-visible {
-  outline: 2px solid var(--color-brand);
-  outline-offset: 1px;
-}
-
-/* Grounds to Glow kiosk (ported from the original standalone kiosk app).
- * Scoped under .kiosk-root so none of this leaks into the rest of the app. */
-.kiosk-root {
-  min-width: 320px;
-  font-family: var(--font-dm-sans), "DM Sans", sans-serif;
-  color: #30372d;
-  background: #f4f1e9;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
-
-.kiosk-root .noise {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
-}
-
-@keyframes kiosk-scan {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(4.5rem);
-  }
-}
-
-.kiosk-root .scan-line {
-  animation: kiosk-scan 1.2s ease-in-out infinite;
-}
-
-@media (max-height: 760px) and (min-width: 1024px) {
-  .kiosk-root header {
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-  }
-}
-
-.kiosk-root :is(button, input):focus-visible {
-  outline: 3px solid rgba(217, 111, 66, 0.45);
-  outline-offset: 3px;
 }

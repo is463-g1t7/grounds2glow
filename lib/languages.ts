@@ -1,4 +1,4 @@
-// Language codes accepted by the kevansoon/PaddleOCR Space (LANG_CONFIG in its app.py).
+// Language codes accepted by the PaddleOCR Space (kept for UI parity).
 export const LANGUAGES = [
   { code: "en", label: "English" },
   { code: "ch", label: "Chinese" },
@@ -28,5 +28,4 @@ export type OcrResponse = { lines: OcrLine[] } | { error: string };
 
 export const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
-// Vercel caps request bodies at 4.5 MB, so stay under that.
 export const MAX_BYTES = 4 * 1024 * 1024;

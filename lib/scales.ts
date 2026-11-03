@@ -1,12 +1,11 @@
 /**
  * Preloaded overhead frames of the central-bin floor scale. `refKg` is what the LCD shows —
- * used only to pick a frame heavier than the bin's current total, and as a labelled
- * fallback if the OCR Space is down mid-demo. The recorded weight comes from OCR.
+ * used to pick a frame heavier than the bin's current total, and as a labelled fallback.
  */
 export const SCALE_FRAMES = [
-  { src: "/weighing_scale_1.jpeg", refKg: 4.2 },
-  { src: "/weighing_scale_2.jpeg", refKg: 5.7 },
-  { src: "/weighing_scale_3.jpeg", refKg: 8.3 },
+  { src: "/images/weighing_scale_1.jpeg", refKg: 4.2 },
+  { src: "/images/weighing_scale_2.jpeg", refKg: 5.7 },
+  { src: "/images/weighing_scale_3.jpeg", refKg: 8.3 },
 ] as const;
 
 export type ScaleFrame = (typeof SCALE_FRAMES)[number];

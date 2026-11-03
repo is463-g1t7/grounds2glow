@@ -3,52 +3,35 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { BoxOverlay } from "@/components/BoxOverlay";
-import type { BinEvent } from "@/lib/analytics";
-import { BIN_CAPACITY_KG, INITIAL_BINS, levelsFor, pantryLabel } from "@/lib/bins";
-import { cleanerById } from "@/lib/cleaners";
+import { Camera, CheckCircle2, RefreshCw, Truck } from "lucide-react";
+import { BoxOverlay } from "@/components/smu/BoxOverlay";
+import { levelsFor, pantryLabel } from "@/lib/bins";
+import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
+import { runDemoOcr } from "@/lib/demo-ocr";
 import type { OcrLine } from "@/lib/languages";
-import { pickFrame, type ScaleFrame } from "@/lib/scales";
-import { loadBins, recordCollect, recordScaleReading } from "@/lib/store";
+import { pickFrame, SCALE_FRAMES, type ScaleFrame } from "@/lib/scales";
+import type { BinEvent } from "@/lib/types";
 import { CleanerShell, NeedsPass, StepColumns } from "./CleanerShell";
 
 type Phase = "aligning" | "locked" | "captured" | "ocr" | "saved" | "rejected" | "failed" | "swap";
 
 // LCD window within the overhead frames (fractions of width/height).
 const LCD = { x: 0.425, y: 0.12, w: 0.15, h: 0.12 };
+const FRAME_SIZE = { width: 2752, height: 1536 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** What the phone would upload: a downscaled JPEG of the current frame. */
-async function captureFrame(src: string, maxW = 1600): Promise<Blob> {
-  const img = new Image();
-  img.src = src;
-  await img.decode();
-  const scale = Math.min(1, maxW / img.naturalWidth);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.naturalWidth * scale);
-  canvas.height = Math.round(img.naturalHeight * scale);
-  canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve, reject) =>
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("Capture failed."))),
-      "image/jpeg",
-      0.85,
-    ),
-  );
-}
-
 export function WeighStation() {
   const params = useSearchParams();
-  const cleaner = cleanerById(params.get("cleaner"));
-  const bin = INITIAL_BINS.find((b) => b.id === params.get("bin"));
+  const { data, loading, refresh } = useBootstrap();
+  const cleaner = data.cleaners.find((c) => c.id === params.get("cleaner"));
+  const bin = data.bins.find((b) => b.id === params.get("bin"));
   const level = Number(params.get("level"));
   const validLevel =
-    bin != null && Number.isInteger(level) && level >= 1 && level <= levelsFor(bin.id);
+    bin != null && Number.isInteger(level) && level >= 1 && level <= levelsFor(bin);
 
   const [phase, setPhase] = useState<Phase>("aligning");
   const [frame, setFrame] = useState<ScaleFrame | null>(null);
-  const [shotUrl, setShotUrl] = useState<string | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [lines, setLines] = useState<OcrLine[]>([]);
   const [activeLine, setActiveLine] = useState<number | null>(null);
@@ -59,8 +42,37 @@ export function WeighStation() {
   const [elapsed, setElapsed] = useState(0);
   const [ocrMs, setOcrMs] = useState<number | null>(null);
   const runRef = useRef(0);
+  const startedRef = useRef(false);
 
-  async function run(exclude?: string) {
+  async function postReading(afterKg: number, source: "ocr" | "reference"): Promise<boolean> {
+    if (!bin || !cleaner || !validLevel) return false;
+    const res = await fetch("/api/readings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({
+        binId: bin.id,
+        level,
+        afterKg,
+        source,
+        cleanerId: cleaner.id,
+        photo: frame?.src ?? null,
+      }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { event?: BinEvent; error?: string };
+    if (res.status === 409) {
+      setReadKg(afterKg);
+      setPhase("rejected");
+      return false;
+    }
+    if (!res.ok || !body.event) throw new Error(body.error ?? `Save failed (${res.status}).`);
+    setEvent(body.event);
+    setPhase("saved");
+    void refresh();
+    return true;
+  }
+
+  async function run(exclude?: string, forcedBefore?: number) {
     if (!bin || !cleaner || !validLevel) return;
     const id = ++runRef.current;
     const live = () => runRef.current === id;
@@ -69,12 +81,8 @@ export function WeighStation() {
     setEvent(null);
     setError(null);
     setOcrMs(null);
-    setShotUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
 
-    const before = loadBins().find((b) => b.id === bin.id)?.weightKg ?? 0;
+    const before = forcedBefore ?? data.bins.find((b) => b.id === bin.id)?.weightKg ?? 0;
     setBeforeKg(before);
     const next = pickFrame(before, exclude);
     if (!next) {
@@ -88,68 +96,33 @@ export function WeighStation() {
     setPhase("locked");
     await sleep(900);
     if (!live()) return;
-
-    let blob: Blob;
-    try {
-      blob = await captureFrame(next.src);
-    } catch {
-      setError("Camera capture failed.");
-      setPhase("failed");
-      return;
-    }
-    if (!live()) return;
-    setShotUrl(URL.createObjectURL(blob));
     setPhase("captured");
+    setSize(FRAME_SIZE);
     await sleep(500);
     if (!live()) return;
 
     setElapsed(0);
     setPhase("ocr");
-    const body = new FormData();
-    body.append("image", blob, "scale.jpg");
-    body.append("bin", bin.id);
-    body.append("level", String(level));
-    body.append("cleaner", cleaner.id);
-    body.append("prev", String(before));
     const started = Date.now();
     try {
-      const res = await fetch("/api/scale-photo", { method: "POST", body });
-      const data = await res.json();
+      const result = await runDemoOcr({ kind: "scale", size: FRAME_SIZE, kg: next.refKg });
       if (!live()) return;
       setOcrMs(Date.now() - started);
-      if (Array.isArray(data.lines)) setLines(data.lines);
-      if (res.status === 409) {
-        setReadKg(data.kg ?? null);
-        setPhase("rejected");
-        return;
-      }
-      if (!res.ok) throw new Error(data.error ?? `OCR failed (${res.status}).`);
-      setReadKg(data.reading.weightKg);
-      const saved = recordScaleReading({
-        binId: bin.id,
-        level,
-        cleanerId: cleaner.id,
-        afterKg: data.reading.weightKg,
-        source: "ocr",
-        photo: next.src,
-        at: data.reading.at,
-      });
-      if (!saved) {
-        setPhase("rejected");
-        return;
-      }
-      setEvent(saved);
-      setPhase("saved");
+      setLines(result.lines);
+      setReadKg(result.kg ?? next.refKg);
+      await postReading(result.kg ?? next.refKg, "ocr");
     } catch (err) {
       if (!live()) return;
-      setError(err instanceof Error ? err.message : "OCR failed.");
+      setError(err instanceof Error ? err.message : "The demo OCR could not read this frame.");
       setPhase("failed");
     }
   }
 
-  // Auto-start like a phone camera that captures once the display is in frame.
-  // Deferred a tick so a StrictMode double-mount cancels the first run before it uploads.
+  // Auto-start once the bin/cleaner resolve from bootstrap (StrictMode-safe: the
+  // first mount's run is cancelled before it can save).
   useEffect(() => {
+    if (!bin || !cleaner || !validLevel || startedRef.current) return;
+    startedRef.current = true;
     const t = window.setTimeout(() => run(), 0);
     const runs = runRef;
     return () => {
@@ -157,24 +130,34 @@ export function WeighStation() {
       runs.current++;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bin, cleaner, validLevel]);
 
   useEffect(() => {
     if (phase !== "ocr") return;
     const started = Date.now();
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 500);
-    return () => clearInterval(id);
+    const id = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 500);
+    return () => window.clearInterval(id);
   }, [phase]);
+
+  if (loading) {
+    return (
+      <CleanerShell step={3}>
+        <p className="rounded-md border border-black/10 bg-white p-5 text-[13px] text-smu-muted shadow-card">
+          Loading weigh station…
+        </p>
+      </CleanerShell>
+    );
+  }
 
   if (!cleaner || !bin || !validLevel) {
     return (
       <CleanerShell step={3} cleaner={cleaner}>
         {cleaner ? (
-          <div className="rounded-xl border border-line bg-card p-5 text-sm">
-            <p className="font-semibold">Pick a building and pantry first</p>
+          <div className="rounded-md border border-black/10 bg-white p-5 text-[14px] shadow-card">
+            <p className="font-semibold text-smu-navy">Pick a building and pantry first</p>
             <Link
               href={`/cleaner/building?cleaner=${cleaner.id}`}
-              className="mt-2 inline-block underline"
+              className="mt-2 inline-block text-smu-gold underline underline-offset-2"
             >
               Back to pantry picker
             </Link>
@@ -188,34 +171,33 @@ export function WeighStation() {
 
   const pantry = pantryLabel(bin, level);
 
-  function applyReference() {
-    if (!frame || !bin || !cleaner) return;
-    const saved = recordScaleReading({
-      binId: bin.id,
-      level,
-      cleanerId: cleaner.id,
-      afterKg: frame.refKg,
-      source: "reference",
-      photo: frame.src,
-    });
-    setReadKg(frame.refKg);
-    if (saved) {
-      setEvent(saved);
-      setPhase("saved");
-    } else {
-      setPhase("rejected");
+  async function applyReference() {
+    if (!frame) return;
+    try {
+      setReadKg(frame.refKg);
+      await postReading(frame.refKg, "reference");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed.");
+      setPhase("failed");
     }
   }
 
-  function swapBin() {
+  async function swapBin() {
     if (!bin || !cleaner) return;
-    recordCollect(bin.id, cleaner.id);
-    run();
+    try {
+      await apiRequest("/api/collect", {
+        method: "POST",
+        body: JSON.stringify({ binId: bin.id, cleanerId: cleaner.id }),
+      });
+      void refresh();
+    } catch {
+      // Already empty — weigh the fresh bin anyway.
+    }
+    run(undefined, 0);
   }
 
-  const showShot = shotUrl && phase !== "aligning" && phase !== "locked";
-  const busy =
-    phase === "aligning" || phase === "locked" || phase === "captured" || phase === "ocr";
+  const showFrame = frame != null;
+  const busy = phase === "aligning" || phase === "locked" || phase === "captured" || phase === "ocr";
   const steps: Array<[string, string | null, boolean]> = [
     [
       "Camera",
@@ -223,25 +205,19 @@ export function WeighStation() {
         ? "finding display…"
         : phase === "locked"
           ? "steady…"
-          : shotUrl
+          : phase === "captured" || phase === "ocr" || phase === "saved"
             ? "auto-captured"
             : null,
-      !!shotUrl,
+      phase === "captured" || phase === "ocr" || phase === "saved",
     ],
+    ["Upload", phase === "ocr" ? "local demo OCR…" : lines.length ? "sent" : null, lines.length > 0],
     [
-      "Upload",
-      phase === "ocr" ? "/api/scale-photo…" : shotUrl && phase !== "captured" ? "sent" : null,
-      !!ocrMs,
-    ],
-    [
-      "PaddleOCR",
+      "Demo OCR",
       phase === "ocr"
         ? `reading… ${elapsed}s`
         : lines.length
           ? lines.map((l) => `“${l.text}”`).join(" ")
-          : ocrMs
-            ? "no text"
-            : null,
+          : null,
       lines.length > 0,
     ],
     ["Weight", readKg != null ? `${readKg.toFixed(2)} kg total` : null, readKg != null],
@@ -255,43 +231,45 @@ export function WeighStation() {
           <>
             <div className="flex items-baseline justify-between gap-2">
               <div>
-                <h1 className="text-lg font-semibold lg:text-2xl lg:tracking-tight">
+                <h1 className="font-display text-[30px] leading-9 text-smu-navy">
                   Weigh the {bin.short} central bin
                 </h1>
-                <p className="text-sm text-muted">
-                  Grounds from <span className="font-medium text-ink">{pantry}</span> pantry
+                <p className="text-[13px] text-smu-muted">
+                  Grounds from <span className="font-medium text-black">{pantry}</span> pantry
                 </p>
               </div>
               <Link
                 href={`/cleaner/building?cleaner=${cleaner.id}`}
-                className="shrink-0 text-xs text-muted underline"
+                className="shrink-0 text-[12px] text-smu-muted underline underline-offset-2"
               >
                 Change
               </Link>
             </div>
 
-            <section className="overflow-hidden rounded-xl border border-line bg-card">
-              <div className="relative overflow-hidden bg-[#0b1520]">
-                {showShot ? (
-                  <BoxOverlay
-                    src={shotUrl}
-                    lines={lines}
-                    size={size}
-                    activeIndex={activeLine}
-                    onActiveChange={setActiveLine}
-                    onLoad={setSize}
-                  />
-                ) : frame ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={frame.src}
-                    alt="Overhead camera view of the floor scale"
-                    className={`block h-auto w-full transition-[filter,transform] duration-[1400ms] ease-out ${
-                      phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
-                    }`}
-                  />
+            <section className="overflow-hidden rounded-md border border-black/10 bg-white shadow-card">
+              <div className="relative overflow-hidden bg-smu-navy-deep">
+                {frame ? (
+                  lines.length > 0 ? (
+                    <BoxOverlay
+                      src={frame.src}
+                      lines={lines}
+                      size={size ?? FRAME_SIZE}
+                      activeIndex={activeLine}
+                      onActiveChange={setActiveLine}
+                      onLoad={setSize}
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={frame.src}
+                      alt="Overhead camera view of the floor scale"
+                      className={`block h-auto w-full transition-[filter,transform] duration-[1400ms] ease-out ${
+                        phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
+                      }`}
+                    />
+                  )
                 ) : (
-                  <div className="grid aspect-[16/9] place-items-center text-xs text-white/60">
+                  <div className="grid aspect-video place-items-center text-[13px] text-white/55">
                     {phase === "swap" ? "Camera paused · bin needs swapping" : "Starting camera…"}
                   </div>
                 )}
@@ -300,7 +278,7 @@ export function WeighStation() {
                   <>
                     <span
                       className={`pointer-events-none absolute rounded border-2 transition-colors ${
-                        phase === "locked" ? "border-leaf" : "animate-pulse border-gold"
+                        phase === "locked" ? "border-smu-success" : "animate-pulse border-smu-gold"
                       }`}
                       style={{
                         left: `${LCD.x * 100}%`,
@@ -309,57 +287,53 @@ export function WeighStation() {
                         height: `${LCD.h * 100}%`,
                       }}
                     />
-                    <span className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-roof" /> LIVE ·
+                    <span className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-medium text-white">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-smu-danger" /> LIVE ·
                       overhead cam
                     </span>
-                    <span className="absolute inset-x-0 bottom-2 text-center text-xs font-medium text-white drop-shadow">
+                    <span className="absolute inset-x-0 bottom-2 text-center text-[11px] font-medium text-white drop-shadow">
                       {phase === "aligning"
                         ? "Detecting scale display…"
                         : "Reading stable · capturing"}
                     </span>
                   </>
                 )}
-                {showShot && frame && (
-                  // Zoomed LCD inset: the display is small in a whole-scale overhead frame.
+
+                {showFrame && (phase === "captured" || phase === "ocr" || phase === "saved") && (
                   <div
                     aria-hidden
-                    className="absolute right-2 top-2 w-[34%] overflow-hidden rounded-md border-2 border-white shadow-lg"
+                    className="absolute right-2 top-2 w-[34%] overflow-hidden rounded border-2 border-white shadow-lg"
                     style={{
                       aspectRatio: `${(LCD.w * 2752) / (LCD.h * 1536)}`,
-                      backgroundImage: `url(${frame.src})`,
+                      backgroundImage: `url(${frame?.src})`,
                       backgroundSize: `${100 / LCD.w}% auto`,
                       backgroundPosition: `${(LCD.x / (1 - LCD.w)) * 100}% ${(LCD.y / (1 - LCD.h)) * 100}%`,
                     }}
                   />
                 )}
+
                 {phase === "captured" && (
-                  <span className="pointer-events-none absolute inset-0 animate-shutter bg-white" />
+                  <span className="shutter pointer-events-none absolute inset-0 bg-white" />
                 )}
                 {phase === "ocr" && (
-                  <span className="absolute inset-x-0 bottom-2 text-center text-xs font-medium text-white drop-shadow">
-                    Sending frame to PaddleOCR… {elapsed}s
+                  <span className="absolute inset-x-0 bottom-2 text-center text-[11px] font-medium text-white drop-shadow">
+                    Reading the scale display with demo OCR… {elapsed}s
                   </span>
                 )}
               </div>
 
               <dl
-                className={`flex flex-col gap-1.5 p-4 font-mono text-xs ${phase === "swap" ? "hidden" : ""}`}
+                className={`flex flex-col gap-1.5 p-4 font-mono text-[11px] ${phase === "swap" ? "hidden" : ""}`}
               >
                 {steps.map(([label, value, ok]) => (
                   <div key={label} className="flex justify-between gap-3">
-                    <dt className="text-muted">{label}</dt>
-                    <dd className={`truncate text-right ${ok ? "text-pine" : ""}`}>
+                    <dt className="text-smu-muted">{label}</dt>
+                    <dd className={`truncate text-right ${ok ? "text-[#287a28]" : ""}`}>
                       {value ?? "…"} {ok ? "✓" : ""}
                     </dd>
                   </div>
                 ))}
               </dl>
-              {phase === "ocr" && elapsed >= 8 && (
-                <p className="mx-4 mb-4 rounded-md bg-tint-ochre px-3 py-2 text-xs text-ochre">
-                  The OCR Space is waking from sleep. The first read can take up to a minute.
-                </p>
-              )}
             </section>
           </>
         }
@@ -367,11 +341,11 @@ export function WeighStation() {
           <>
             {busy && (
               // Laptop only: fills the side column while the camera works.
-              <section className="hidden rounded-xl border border-line bg-card p-5 lg:block">
-                <p className="text-xs font-semibold tracking-[0.15em] text-muted">
-                  WEIGHING IN PROGRESS
+              <section className="hidden rounded-md border border-black/10 bg-white p-5 shadow-card lg:block">
+                <p className="font-display text-[11px] uppercase tracking-[2px] text-smu-muted">
+                  Weighing in progress
                 </p>
-                <dl className="mt-3 flex flex-col gap-2 text-sm">
+                <dl className="mt-3 flex flex-col gap-2 text-[13px]">
                   {(
                     [
                       ["Cleaner", `${cleaner.name} · ${cleaner.pass}`],
@@ -379,39 +353,39 @@ export function WeighStation() {
                       ["Pantry", pantry],
                       [
                         "Bin before",
-                        beforeKg == null ? "…" : `${beforeKg.toFixed(2)} / ${BIN_CAPACITY_KG} kg`,
+                        beforeKg == null ? "…" : `${beforeKg.toFixed(2)} / ${bin.capacityKg} kg`,
                       ],
                     ] as const
                   ).map(([k, v]) => (
                     <div key={k} className="flex justify-between gap-3">
-                      <dt className="text-muted">{k}</dt>
-                      <dd className="text-right font-medium">{v}</dd>
+                      <dt className="text-smu-muted">{k}</dt>
+                      <dd className="text-right font-medium text-smu-navy">{v}</dd>
                     </div>
                   ))}
                 </dl>
-                <p className="mt-4 flex items-center gap-2 rounded-md bg-sand px-3 py-2 text-xs text-muted">
-                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-gold" />
+                <p className="mt-4 flex items-center gap-2 rounded bg-smu-cream px-3 py-2 text-[11.5px] text-smu-muted">
+                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-smu-gold" />
                   {phase === "ocr"
-                    ? `Reading the scale display with PaddleOCR… ${elapsed}s`
+                    ? `Reading the scale display with demo OCR… ${elapsed}s`
                     : "Hold the bin still. The camera captures once the display is steady."}
                 </p>
               </section>
             )}
 
             {phase === "saved" && event && (
-              <section className="animate-rise rounded-xl border border-leaf/40 bg-tint-leaf p-5">
-                <p className="text-xs font-semibold tracking-[0.15em] text-pine">
-                  LOGGED TO AUDIT TRAIL
+              <section className="fade-up rounded-md border border-smu-success/30 bg-[#eef7ea] p-5">
+                <p className="font-display text-[11px] uppercase tracking-[2px] text-[#287a28]">
+                  Logged to audit trail
                 </p>
-                <p className="mt-1 text-3xl font-bold tabular-nums text-pine">
+                <p className="mt-1 font-display text-[34px] leading-10 tabular-nums text-[#287a28]">
                   +{event.kg.toFixed(2)} kg
                 </p>
-                <p className="text-sm">
+                <p className="text-[13px] text-smu-muted">
                   from {event.pantry} · bin {event.beforeKg?.toFixed(2)} →{" "}
                   {event.afterKg?.toFixed(2)} kg
-                  <span className="text-muted"> / {BIN_CAPACITY_KG} kg</span>
+                  <span className="text-black/40"> / {bin.capacityKg} kg</span>
                 </p>
-                <p className="mt-1 text-xs text-muted">
+                <p className="mt-1 text-[11px] text-smu-muted">
                   {cleaner.name} ·{" "}
                   <span suppressHydrationWarning>{new Date(event.at).toLocaleTimeString()}</span> ·{" "}
                   {event.source === "ocr"
@@ -421,20 +395,17 @@ export function WeighStation() {
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Link
                     href={`/dashboard?bin=${bin.id}`}
-                    className="col-span-2 flex h-11 items-center justify-center rounded-md bg-brand text-sm font-semibold text-white hover:opacity-90"
+                    className="btn-smu btn-smu-gold col-span-2"
                   >
                     View {bin.short} on dashboard →
                   </Link>
                   <Link
                     href={`/cleaner/building?cleaner=${cleaner.id}`}
-                    className="flex h-10 items-center justify-center rounded-md border border-line bg-card text-sm font-medium hover:bg-sand"
+                    className="btn-smu btn-smu-outline btn-smu-sm"
                   >
                     Log another pantry
                   </Link>
-                  <Link
-                    href="/cleaner"
-                    className="flex h-10 items-center justify-center rounded-md border border-line bg-card text-sm font-medium hover:bg-sand"
-                  >
+                  <Link href="/cleaner" className="btn-smu btn-smu-outline btn-smu-sm">
                     Sign out
                   </Link>
                 </div>
@@ -442,11 +413,11 @@ export function WeighStation() {
             )}
 
             {phase === "rejected" && (
-              <section className="animate-rise rounded-xl border border-harvest/40 bg-tint-ochre p-5 text-sm">
-                <p className="font-semibold text-ochre">
+              <section className="fade-up rounded-md border border-smu-warning/30 bg-smu-warning/10 p-5 text-[13px]">
+                <p className="font-semibold text-[#8a6209]">
                   Reading isn&apos;t above the bin&apos;s last total
                 </p>
-                <p className="mt-1">
+                <p className="mt-1 text-smu-muted">
                   Scale shows {readKg != null ? `${readKg.toFixed(2)} kg` : "no change"}, bin was{" "}
                   {beforeKg?.toFixed(2)} kg. The camera may have caught the scale before the grounds
                   settled.
@@ -454,30 +425,30 @@ export function WeighStation() {
                 <button
                   type="button"
                   onClick={() => run(frame?.src)}
-                  className="mt-3 h-10 w-full rounded-md bg-brand text-sm font-semibold text-white"
+                  className="btn-smu btn-smu-gold mt-3 w-full"
                 >
-                  Retake photo
+                  <RefreshCw className="h-4 w-4" /> Retake photo
                 </button>
               </section>
             )}
 
             {phase === "failed" && (
-              <section className="animate-rise rounded-xl border border-roof/30 bg-tint-ember p-5 text-sm">
-                <p className="font-semibold text-ember">Couldn&apos;t read the scale</p>
-                <p className="mt-1 text-ember">{error}</p>
+              <section className="fade-up rounded-md border border-smu-danger/25 bg-smu-danger/5 p-5 text-[13px]">
+                <p className="font-semibold text-smu-danger">Couldn&apos;t read the scale</p>
+                <p className="mt-1 text-smu-danger/80">{error}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => run()}
-                    className="h-10 rounded-md bg-brand text-sm font-semibold text-white"
+                    className="btn-smu btn-smu-gold btn-smu-sm"
                   >
                     Retry OCR
                   </button>
                   {frame && (
                     <button
                       type="button"
-                      onClick={applyReference}
-                      className="h-10 rounded-md border border-line bg-card text-sm font-medium hover:bg-sand"
+                      onClick={() => void applyReference()}
+                      className="btn-smu btn-smu-outline btn-smu-sm"
                       title="Logs the frame's known reading, flagged as a fallback in the audit trail"
                     >
                       Use reference {frame.refKg} kg
@@ -488,21 +459,63 @@ export function WeighStation() {
             )}
 
             {phase === "swap" && (
-              <section className="animate-rise rounded-xl border border-roof/30 bg-tint-ember p-5 text-sm">
-                <p className="font-semibold text-ember">{bin.short} bin is too full to weigh</p>
-                <p className="mt-1">
-                  It already holds {beforeKg?.toFixed(1)} kg of {BIN_CAPACITY_KG} kg. Swap in an
+              <section className="fade-up rounded-md border border-smu-danger/25 bg-smu-danger/5 p-5 text-[13px]">
+                <p className="font-semibold text-smu-danger">{bin.short} bin is too full to weigh</p>
+                <p className="mt-1 text-smu-muted">
+                  It already holds {beforeKg?.toFixed(1)} kg of {bin.capacityKg} kg. Swap in an
                   empty bin, then weigh again.
                 </p>
                 <button
                   type="button"
-                  onClick={swapBin}
-                  className="mt-3 h-10 w-full rounded-md bg-brand text-sm font-semibold text-white"
+                  onClick={() => void swapBin()}
+                  className="btn-smu btn-smu-gold mt-3 w-full"
                 >
-                  I&apos;ve swapped the bin · log collection
+                  <Truck className="h-4 w-4" /> I&apos;ve swapped the bin · log collection
                 </button>
               </section>
             )}
+
+            <div className="hidden rounded-md border border-black/10 bg-white p-4 lg:block">
+              <p className="flex items-center gap-2 text-[11.5px] text-smu-muted">
+                <Camera className="h-3.5 w-3.5" /> Demo overhead camera · frame{" "}
+                {frame ? SCALE_FRAMES.indexOf(frame) + 1 : "—"} of {SCALE_FRAMES.length}
+              </p>
+              <p className="mt-2 flex items-center gap-2 text-[11.5px] text-smu-muted">
+                <CheckCircle2 className="h-3.5 w-3.5 text-smu-success" /> Saves to the shared
+                Postgres database
+              </p>
+            </div>
+
+            {/* Demo controls: force the failure paths without touching the camera. */}
+            <div className="rounded-md border border-dashed border-black/15 p-4">
+              <p className="font-display text-[10px] uppercase tracking-[2px] text-black/35">
+                Demo states
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    runRef.current++;
+                    setError("Demo: LCD glare prevented a clean read.");
+                    setPhase("failed");
+                  }}
+                  className="btn-smu btn-smu-outline btn-smu-sm"
+                >
+                  Simulate OCR failure
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    runRef.current++;
+                    setReadKg(Math.max(0, (beforeKg ?? 0) - 0.4));
+                    setPhase("rejected");
+                  }}
+                  className="btn-smu btn-smu-outline btn-smu-sm"
+                >
+                  Simulate stale reading
+                </button>
+              </div>
+            </div>
           </>
         }
       />
