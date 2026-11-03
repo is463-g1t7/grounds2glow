@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { KioskApp, KioskGate } from "@/components/kiosk/KioskApp";
+import { KioskFlow } from "@/components/kiosk/kiosk-flow";
 
 export const metadata: Metadata = {
   title: "Grounds to Glow · Coffee Scrub Station",
@@ -10,11 +10,11 @@ export const metadata: Metadata = {
 };
 
 export default function KioskPage() {
-  // KioskGate reads ?chat=1 on the client; the Suspense boundary lets the
-  // route prerender (cacheComponents). Fallback is the default kiosk view.
+  // KioskFlow reads ?chat=1 on the client; the Suspense boundary lets the
+  // route prerender. Fallback is a plain loading state.
   return (
-    <Suspense fallback={<KioskApp />}>
-      <KioskGate />
+    <Suspense fallback={<div className="min-h-screen bg-[#f3eee7]" />}>
+      <KioskFlow />
     </Suspense>
   );
 }

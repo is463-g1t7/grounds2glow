@@ -1,85 +1,126 @@
-# prototype
+# SMU Circular Coffee
 
-A Next.js app that extracts text from uploaded images. The browser sends the image to the
-`/api/ocr` route, and the server forwards it to the
-[kevansoon/PaddleOCR](https://huggingface.co/spaces/kevansoon/PaddleOCR) Hugging Face Space
-with `@gradio/client`.
+A redesigned SMU Circular Coffee prototype. The app is built with Next.js 16 (App Router),
+Postgres and Drizzle ORM, and uses the SMU design system from `../docs/DESIGN.md`.
 
-```
-Browser ──multipart──▶ /api/ocr ──@gradio/client──▶ kevansoon-paddleocr.hf.space /predict
-        ◀──{ lines }──          ◀──[{ text, box }]──
-```
+## What is in here
 
-## Setup
+- Public programme landing page, live operations dashboard, marketplace and programme reporting.
+- Cleaner flow: pass scan → pantry picker → weigh station, with a printable pass sheet.
+- Scale scanner and OCR reader tools.
+- Grounds to Glow kiosk: welcome, check-in, QR guide, recipe, dispensing, thanks and
+  `?chat=1` mobile chat. Common questions get deterministic answers; other questions go to
+  OpenRouter using `z-ai/glm-5.3-flash` with a kiosk-specific system prompt.
+- Postgres-backed bins, audit events, cleaners, marketplace listings/claims, news,
+  programme events and programme metrics.
+- Drizzle schema (`db/schema.ts`), generated migrations (`db/migrations/`) and a single
+  seed script (`scripts/seed.ts`).
+
+## Local setup
+
+Requirements: Bun 1.4+, Docker.
 
 ```bash
 bun install
-cp .env.example .env.local
+cp .env.local.example .env.local   # Windows: copy .env.local.example .env.local
+docker compose up -d
+bun run db:migrate
+bun run db:seed
 bun run dev
 ```
 
 Open http://localhost:3000.
 
-| Variable      | Default               | Notes                         |
-| ------------- | --------------------- | ----------------------------- |
-| `HF_SPACE_ID` | `kevansoon/PaddleOCR` | Space to call                 |
-| `HF_TOKEN`    | (unset)               | Only needed for private Space |
+The Docker database listens on **localhost:55432** (not 5432, to avoid clashing with a
+local Postgres). The compose file uses the `postgres:18` image and a named volume,
+`smu_pgdata`. The local `.env.local` points both `DATABASE_URL` and `DIRECT_URL` at it.
+
+### Database commands
+
+```bash
+bun run db:up        # start Postgres 18
+bun run db:generate  # generate a new SQL migration from db/schema.ts
+bun run db:migrate   # apply pending Drizzle migrations
+bun run db:seed      # load scripts/seed.ts data
+bun run db:check     # verify seeded history, weights and claims agree
+bun run db:reset     # migrate + seed
+bun run db:down      # stop the container (volume is kept)
+```
+
+`db:migrate` uses `DIRECT_URL` when present, then `DATABASE_URL`. `scripts/seed.ts` uses the
+same precedence. `drizzle.config.ts` loads `.env.local` first, then `.env`, so local Docker
+and Supabase credentials can coexist. Bun loads both files automatically for `db:seed`.
+
+## Supabase
+
+The production-style database is Supabase. Put the pooler connection strings in `.env`:
+
+```env
+DATABASE_URL=postgresql://...pooler.supabase.com:6543/postgres
+DIRECT_URL=postgresql://...pooler.supabase.com:5432/postgres
+```
+
+Then run:
+
+```bash
+bun run db:migrate
+bun run db:seed
+```
+
+The empty Supabase database has been migrated with Drizzle and seeded with the same data as
+the local Docker database.
+
+## Data model
+
+| Table | Purpose |
+| --- | --- |
+| `bins` | Seven building bins, current weight, capacity, pantry levels |
+| `cleaners` | Demo staff roster and pass numbers |
+| `bin_events` | Deposits and collections, with cleaner/source/before/after audit fields |
+| `listings` | Marketplace batches and claim state |
+| `claims` | Claim history |
+| `news_items` | Landing-page news cards |
+| `programme_events` | Landing-page event cards |
+| `programme_metrics` | Programme-to-date impact metrics |
+
+All demo rows live in `scripts/seed.ts`; there are no entity data arrays in components.
 
 ## API
 
-`POST /api/ocr` with `multipart/form-data` fields:
+| Route | Purpose |
+| --- | --- |
+| `GET /api/bootstrap` | All data needed by the client surfaces |
+| `POST /api/readings` | Record a floor-scale reading and update the bin |
+| `POST /api/collect` | Empty a bin and write an audit event |
+| `POST /api/listings` | Create a marketplace batch |
+| `POST /api/listings/[id]/claim` | Claim a batch in a transaction |
+| `POST /api/sync` | Insert a simulated remote scale reading |
+| `POST /api/simulate` | One demo live-day step, including auto-collect |
+| `POST /api/kiosk-chat` | Grounds to Glow chat via OpenRouter |
+| `POST /api/reset` | Re-run `scripts/seed.ts` |
 
-- `image`: PNG, JPEG or WebP, 4 MB or smaller
-- `lang`: `en` (default), `ch`, `fr`, `german`, `korean` or `japan`
+## Design
+
+The shared SMU design system is documented in `../docs/DESIGN.md`. The app uses Oswald for
+display, Libre Franklin for body text, SMU gold `#8A704C`, navy `#141B4D` and limestone
+`#E8E2DA`, with the fixed two-plane header, off-canvas menu, search overlay, page headers and
+footer matching the reference site.
+
+The implementation is a port of the Vite design prototype in
+`../.scratch/smu-redesign`; the landing page and product surfaces are intentionally 1:1.
+
+## Verification
 
 ```bash
-curl -F image=@receipt.jpg -F lang=en http://localhost:3000/api/ocr
+bun run lint
+bun run build
+# with the Docker DB up and seeded:
+curl http://localhost:3000/api/bootstrap
 ```
 
-Returns `{ "lines": [{ "text": "...", "box": [[x, y], [x, y], [x, y], [x, y]] }] }`, with box
-corners in original-image pixels. Errors return `{ "error": "..." }` with status 400 (bad
-input), 503 (Space waking up) or 502 (other upstream failure).
+Kiosk chat requires `OPENROUTER_API_KEY` in `.env` (or `.env.local`). Without it, the kiosk's
+deterministic answers still work and the API returns 503.
 
-## Files
-
-- `app/api/ocr/route.ts`: validates the upload and calls the Space
-- `lib/ocr.ts`: server-only Gradio client wrapper (cached connection, one retry)
-- `lib/languages.ts`: shared language list, types and upload limits
-- `components/OcrUploader.tsx`: upload form and results list
-- `components/BoxOverlay.tsx`: draws detected text boxes over the image
-
-## Cleaner drop-off flow (demo)
-
-1. `/cleaner`: scan a staff pass. Tap a demo pass, or on Chrome for Android/macOS scan a QR
-   from `/passes` with the camera.
-2. `/cleaner/building`: pick the building on the campus map, then the pantry level.
-3. `/cleaner/weigh`: the "overhead camera" auto-captures one of `public/weighing_scale_{1,2,3}.jpeg`
-   (4.2 / 5.7 / 8.3 kg, a frame heavier than the bin's current total), sends it to
-   `/api/scale-photo`, and logs the increase against the cleaner and pantry.
-
-For the presentation, open `/dashboard` and click **Cleaner app ↗**. Drop-offs logged in the
-cleaner tab appear on the dashboard live: a banner, the bin's new weight, and a row in the
-building's **audit trail** (filterable, CSV export). State lives in the browser's localStorage,
-so both tabs must be in the same browser. **Reset** on the dashboard restores the seed data.
-
-`lib/cleaners.ts` holds the demo roster, `lib/scales.ts` the scale frames, and `lib/store.ts`
-the shared localStorage store.
-
-## Deployment
-
-Production runs at https://prototype-one-green.vercel.app, deployed by the
-`Deploy` workflow (`.github/workflows/deploy.yml`) on every push to `main`
-(and manual `workflow_dispatch` from `main`; other refs are skipped). The
-runner has no `.vercel` link — the CLI resolves the project from the
-`VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` secrets.
-
-The Vercel project (`prototype`, team `charles-personal`) is driven by CLI with
-`VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` repo secrets — native
-Vercel↔GitHub integration cannot see the private `is463-g1t7` org repo. If the
-`VERCEL_TOKEN` secret is revoked or rotated, update it with a fresh token.
-
-## Notes
-
-- The free Space sleeps when idle. The first request afterwards can take up to a minute
-  while it loads its models.
-- The Space has 2 workers for `en`/`ch` and 1 for other languages, so concurrent requests queue.
+The Playwright smoke test used during the port lives at
+`../.scratch/smu-reference/prototype-smoke.mjs` and covers DB seed/reset, dashboard simulation,
+marketplace claims, the cleaner flow, the kiosk flow and kiosk chat.

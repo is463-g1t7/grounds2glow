@@ -1,31 +1,39 @@
-import { BIN_CAPACITY_KG, INITIAL_BINS } from "@/lib/bins";
-import { addReading, listReadings } from "@/lib/readings";
+import { createReading } from "@/lib/queries";
+import type { EventSource } from "@/lib/types";
 
-/** Webhook + dashboard read model: POST { binId, weightKg } to record, GET to list. */
-export async function GET() {
-  return Response.json({ readings: listReadings() });
-}
+const SOURCES: EventSource[] = ["ocr", "reference", "manual", "demo"];
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as {
-    binId?: unknown;
-    weightKg?: unknown;
-  } | null;
-
-  const binId = body?.binId;
-  if (typeof binId !== "string" || !INITIAL_BINS.some((b) => b.id === binId)) {
-    return Response.json({ error: "Unknown binId." }, { status: 400 });
+  try {
+    const body = (await request.json()) as {
+      binId?: string;
+      level?: number;
+      afterKg?: number;
+      source?: EventSource;
+      cleanerId?: string | null;
+      photo?: string | null;
+    };
+    if (!body.binId || typeof body.level !== "number" || !Number.isInteger(body.level) || typeof body.afterKg !== "number") {
+      return Response.json({ error: "binId, level and afterKg are required." }, { status: 400 });
+    }
+    if (!body.source || !SOURCES.includes(body.source)) {
+      return Response.json({ error: "Unknown reading source." }, { status: 400 });
+    }
+    const event = await createReading({
+      binId: body.binId,
+      level: body.level,
+      afterKg: body.afterKg,
+      source: body.source,
+      cleanerId: body.cleanerId,
+      photo: body.photo,
+    });
+    if (!event) {
+      return Response.json({ error: "Reading is not above the bin's last total." }, { status: 409 });
+    }
+    return Response.json({ event }, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to record reading.";
+    console.error("[readings]", error);
+    return Response.json({ error: message }, { status: 400 });
   }
-  const weightKg = Number(body?.weightKg);
-  if (!Number.isFinite(weightKg) || weightKg < 0 || weightKg > BIN_CAPACITY_KG) {
-    return Response.json({ error: `weightKg must be 0–${BIN_CAPACITY_KG}.` }, { status: 400 });
-  }
-
-  const reading = addReading({
-    binId,
-    weightKg: Math.round(weightKg * 100) / 100,
-    at: new Date().toISOString(),
-    source: "manual",
-  });
-  return Response.json({ reading }, { status: 201 });
 }

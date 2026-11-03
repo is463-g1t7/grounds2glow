@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:18
+    container_name: smu-circular-coffee-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: smu
+      POSTGRES_PASSWORD: smu
+      POSTGRES_DB: smu_coffee
+    ports:
+      - "55432:5432"
+    volumes:
+      - smu_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smu -d smu_coffee"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  smu_pgdata:
