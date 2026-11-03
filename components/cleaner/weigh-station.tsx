@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle2, RefreshCw, Truck } from "lucide-react";
-import { BoxOverlay } from "@/components/smu/BoxOverlay";
+import { BoxOverlay } from "@/components/smu/box-overlay";
 import { levelsFor, pantryLabel } from "@/lib/bins";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import { runDemoOcr } from "@/lib/demo-ocr";
 import type { OcrLine } from "@/lib/languages";
 import { pickFrame, SCALE_FRAMES, type ScaleFrame } from "@/lib/scales";
 import type { BinEvent } from "@/lib/types";
-import { CleanerShell, NeedsPass, StepColumns } from "./CleanerShell";
+import { CleanerShell, NeedsPass, StepColumns } from "./cleaner-shell";
 
 type Phase = "aligning" | "locked" | "captured" | "ocr" | "saved" | "rejected" | "failed" | "swap";
 

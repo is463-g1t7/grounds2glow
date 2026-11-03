@@ -24,12 +24,12 @@ import {
   Sparkles,
   Truck,
 } from "lucide-react";
-import { PageHeader } from "@/components/smu/PageChrome";
-import { StatStrip } from "@/components/smu/StatStrip";
-import { Toast } from "@/components/smu/Toast";
-import { CampusMap } from "@/components/smu/CampusMap";
-import { BinSpotlight } from "@/components/dashboard/BinSpotlight";
-import { AuditTrail } from "@/components/dashboard/AuditTrail";
+import { PageHeader } from "@/components/smu/page-chrome";
+import { StatStrip } from "@/components/smu/stat-strip";
+import { Toast } from "@/components/smu/toast";
+import { CampusMap } from "@/components/smu/campus-map";
+import { BinSpotlight } from "@/components/dashboard/bin-spotlight";
+import { AuditTrail } from "@/components/dashboard/audit-trail";
 import {
   ActivityFeed,
   BuildingLeaderboard,
@@ -39,7 +39,7 @@ import {
   MonthlyChart,
   PantryLeaderboard,
   PantryWatch,
-} from "@/components/dashboard/FleetPanels";
+} from "@/components/dashboard/fleet-panels";
 import {
   avgCaddyKg,
   collectionsWeek,

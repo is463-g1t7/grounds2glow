@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { SiteHeader } from "@/components/smu/SiteHeader";
-import { SiteFooter } from "@/components/smu/SiteFooter";
+import { SiteHeader } from "@/components/smu/site-header";
+import { SiteFooter } from "@/components/smu/site-footer";
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (

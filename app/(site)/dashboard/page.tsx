@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { DashboardClient } from "@/components/dashboard/DashboardClient";
+import { DashboardClient } from "@/components/dashboard/dashboard-client";
 
 export const metadata: Metadata = { title: "Live operations | SMU Circular Coffee" };
 

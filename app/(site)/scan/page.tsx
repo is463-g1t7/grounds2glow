@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Camera, ScanLine, Upload } from "lucide-react";
-import { PageHeader } from "@/components/smu/PageChrome";
-import { Toast } from "@/components/smu/Toast";
+import { PageHeader } from "@/components/smu/page-chrome";
+import { Toast } from "@/components/smu/toast";
 import { levelsFor, pantryLabel } from "@/lib/bins";
 import { pickFrame } from "@/lib/scales";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";

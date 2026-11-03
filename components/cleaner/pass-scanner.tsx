@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Camera, Check } from "lucide-react";
 import { useBootstrap } from "@/lib/client/use-bootstrap";
 import type { Cleaner } from "@/lib/types";
-import { CleanerShell, StepColumns } from "./CleanerShell";
+import { CleanerShell, StepColumns } from "./cleaner-shell";
 
 // Shape-detection API: Chrome on Android/macOS/ChromeOS. Not in TS's DOM lib yet.
 type Detector = { detect: (src: CanvasImageSource) => Promise<Array<{ rawValue: string }>> };

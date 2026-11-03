@@ -16,8 +16,8 @@ import {
   Warehouse,
   X,
 } from "lucide-react";
-import { PageHeader } from "@/components/smu/PageChrome";
-import { Toast } from "@/components/smu/Toast";
+import { PageHeader } from "@/components/smu/page-chrome";
+import { Toast } from "@/components/smu/toast";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import type { Listing } from "@/lib/types";
 import { formatKg } from "@/lib/utils";

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
-import { PageHeader } from "@/components/smu/PageChrome";
-import { PassCard } from "@/components/cleaner/PassScanner";
+import { PageHeader } from "@/components/smu/page-chrome";
+import { PassCard } from "@/components/cleaner/pass-scanner";
 import { useBootstrap } from "@/lib/client/use-bootstrap";
 
 export default function PassesPage() {

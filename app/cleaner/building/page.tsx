@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { BuildingPicker } from "@/components/cleaner/BuildingPicker";
+import { BuildingPicker } from "@/components/cleaner/building-picker";
 
 export const metadata = { title: "Pick pantry" };
 

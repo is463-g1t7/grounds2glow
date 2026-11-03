@@ -3,12 +3,12 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { CampusMap } from "@/components/smu/CampusMap";
+import { CampusMap } from "@/components/smu/campus-map";
 import { ago } from "@/lib/analytics";
 import { levelsFor, statusFor } from "@/lib/bins";
 import { useBootstrap } from "@/lib/client/use-bootstrap";
 import { SCALE_FRAMES } from "@/lib/scales";
-import { CleanerShell, NeedsPass, StepColumns } from "./CleanerShell";
+import { CleanerShell, NeedsPass, StepColumns } from "./cleaner-shell";
 
 const NO_DIM = new Set<string>();
 const MAX_FRAME_KG = Math.max(...SCALE_FRAMES.map((f) => f.refKg));

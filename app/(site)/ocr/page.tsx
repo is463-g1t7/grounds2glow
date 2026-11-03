@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Copy, FileImage, ScanLine, UploadCloud } from "lucide-react";
-import { PageHeader } from "@/components/smu/PageChrome";
-import { BoxOverlay } from "@/components/smu/BoxOverlay";
+import { PageHeader } from "@/components/smu/page-chrome";
+import { BoxOverlay } from "@/components/smu/box-overlay";
 import {
   ACCEPTED_TYPES,
   DEFAULT_LANG,

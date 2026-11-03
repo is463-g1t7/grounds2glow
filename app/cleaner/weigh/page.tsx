@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { WeighStation } from "@/components/cleaner/WeighStation";
+import { WeighStation } from "@/components/cleaner/weigh-station";
 
 export const metadata = { title: "Weigh bin" };
 

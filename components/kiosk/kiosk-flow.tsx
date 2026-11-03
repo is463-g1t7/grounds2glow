@@ -17,7 +17,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { KioskChat } from "@/components/kiosk/KioskChat";
+import { KioskChat } from "@/components/kiosk/kiosk-chat";
 
 const steps = [
   {

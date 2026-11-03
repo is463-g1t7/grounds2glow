@@ -12,8 +12,8 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { HeroCarousel } from "@/components/smu/HeroCarousel";
-import { SectionHeading } from "@/components/smu/PageChrome";
+import { HeroCarousel } from "@/components/smu/hero-carousel";
+import { SectionHeading } from "@/components/smu/page-chrome";
 import { useBootstrap } from "@/lib/client/use-bootstrap";
 
 const loop = [

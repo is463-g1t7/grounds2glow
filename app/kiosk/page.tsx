@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { KioskFlow } from "@/components/kiosk/KioskFlow";
+import { KioskFlow } from "@/components/kiosk/kiosk-flow";
 
 export const metadata: Metadata = {
   title: "Grounds to Glow · Coffee Scrub Station",
