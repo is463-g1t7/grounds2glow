@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Paperclip, Sparkles } from "lucide-react";
+import { ArrowUp, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Based on shadcn/ui AI Elements Prompt Input: https://ui.shadcn.com/docs/ai-elements/base/prompt-input */
@@ -55,15 +55,11 @@ export function PromptInput({
         >
           <Paperclip className="h-4 w-4" />
         </button>
-        <span className="ml-auto flex items-center gap-1.5 rounded-full border border-black/10 px-2.5 py-1 text-[12px] font-medium text-smu-muted">
-          <Sparkles className="h-3 w-3 text-smu-gold" />
-          GLM 5.3 Flash
-        </span>
         <button
           type="submit"
           disabled={disabled || !value.trim()}
           aria-label="Send message"
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-smu-navy text-white transition-colors hover:bg-smu-navy-soft disabled:cursor-not-allowed disabled:bg-black/15"
+          className="ml-auto flex h-8 w-8 items-center justify-center rounded-full bg-smu-navy text-white transition-colors hover:bg-smu-navy-soft disabled:cursor-not-allowed disabled:bg-black/15"
         >
           <ArrowUp className="h-4 w-4" />
         </button>
