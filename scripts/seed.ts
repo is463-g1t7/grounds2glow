@@ -113,7 +113,7 @@ const news = [
   { id: "news-1", title: "33 pantries now log every drop-off in real time", tag: "Programme update", publishedAt: "2026-10-28", image: "/images/coffee-machine.jpg", href: "/dashboard" },
   { id: "news-2", title: "The SOSS garden trial: 180 kg of grounds, one growing season", tag: "Impact story", publishedAt: "2026-10-21", image: "/images/garden.jpg", href: "/dashboard" },
   { id: "news-3", title: "Meet the grounds crew keeping the loop turning", tag: "Community", publishedAt: "2026-10-14", image: "/images/programme-intro.jpg", href: "/#about" },
-  { id: "news-4", title: "What we learned from our first AI matching pilot", tag: "Innovation", publishedAt: "2026-10-07", image: "/images/research-digital.webp", href: "/assistant" },
+  { id: "news-4", title: "What we learned from our first AI matching pilot", tag: "Innovation", publishedAt: "2026-10-07", image: "/images/research-digital.webp", href: "/marketplace" },
 ];
 
 const programmeEvents = [

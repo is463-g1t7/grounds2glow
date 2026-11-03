@@ -764,8 +764,8 @@ function KioskChatScreen() {
             <div>
               <h1 className="font-display text-[26px] leading-7">Grounds to Glow AI</h1>
               <p className="mt-1 text-[12px] leading-5 text-white/60">
-                Coffee scrub guidance and the skincare quiz. Built-in guide; don’t share personal or
-                medical information.
+                Coffee scrub guidance and the skincare quiz. AI-assisted guide; don’t share personal
+                or medical information.
               </p>
             </div>
           </div>

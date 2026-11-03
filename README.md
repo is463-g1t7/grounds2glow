@@ -5,11 +5,12 @@ Postgres and Drizzle ORM, and uses the SMU design system from `../docs/DESIGN.md
 
 ## What is in here
 
-- Public programme landing page, live operations dashboard, marketplace, Grounds AI assistant.
+- Public programme landing page, live operations dashboard, marketplace and programme reporting.
 - Cleaner flow: pass scan → pantry picker → weigh station, with a printable pass sheet.
 - Scale scanner and OCR reader tools.
 - Grounds to Glow kiosk: welcome, check-in, QR guide, recipe, dispensing, thanks and
-  `?chat=1` mobile chat.
+  `?chat=1` mobile chat. Common questions get deterministic answers; other questions go to
+  OpenRouter using `z-ai/glm-5.3-flash` with a kiosk-specific system prompt.
 - Postgres-backed bins, audit events, cleaners, marketplace listings/claims, news,
   programme events and programme metrics.
 - Drizzle schema (`db/schema.ts`), generated migrations (`db/migrations/`) and a single
@@ -95,6 +96,7 @@ All demo rows live in `scripts/seed.ts`; there are no entity data arrays in comp
 | `POST /api/listings/[id]/claim` | Claim a batch in a transaction |
 | `POST /api/sync` | Insert a simulated remote scale reading |
 | `POST /api/simulate` | One demo live-day step, including auto-collect |
+| `POST /api/kiosk-chat` | Grounds to Glow chat via OpenRouter |
 | `POST /api/reset` | Re-run `scripts/seed.ts` |
 
 ## Design
@@ -115,6 +117,9 @@ bun run build
 # with the Docker DB up and seeded:
 curl http://localhost:3000/api/bootstrap
 ```
+
+Kiosk chat requires `OPENROUTER_API_KEY` in `.env` (or `.env.local`). Without it, the kiosk's
+deterministic answers still work and the API returns 503.
 
 The Playwright smoke test used during the port lives at
 `../.scratch/smu-reference/prototype-smoke.mjs` and covers DB seed/reset, dashboard simulation,

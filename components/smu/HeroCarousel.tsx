@@ -23,7 +23,7 @@ const buildSlides = (pantryLevels: number) => [
   {
     image: "/images/garden.jpg",
     title: "Good grounds, new ground",
-    body: "Claim fresh grounds for your garden, classroom or workshop. Grounds AI matches every batch with the people who can put it to work.",
+    body: "Claim fresh grounds for your garden, classroom or workshop. Every batch is weighed, listed and ready for its next purpose.",
     cta: "Browse the marketplace",
     href: "/marketplace",
   },

@@ -29,11 +29,9 @@ const nav: NavItem[] = [
     href: "/marketplace",
     children: [
       { label: "Browse grounds", href: "/marketplace", description: "Available batches across campus" },
-      { label: "AI matching", href: "/assistant", description: "Describe what you need and get matched" },
       { label: "Listing guidance", href: "/marketplace#guidance", description: "How batches are weighed and stored" },
     ],
   },
-  { label: "Grounds AI", href: "/assistant" },
   {
     label: "Tools",
     href: "/scan",
@@ -288,16 +286,16 @@ export function SiteHeader() {
             </div>
 
             <div className="mt-auto border-t border-white/10 pt-6">
-              <Link href="/assistant"
+              <Link href="/kiosk"
                 onClick={() => setMenuOpen(false)}
                 className="group flex items-center justify-between rounded-lg bg-smu-gold/15 p-4 transition-colors hover:bg-smu-gold/25"
               >
                 <div>
                   <p className="font-display text-[17px] uppercase tracking-[1px] text-white">
-                    Ask Grounds AI
+                    Grounds to Glow
                   </p>
                   <p className="mt-1 text-[13px] leading-5 text-white/60">
-                    Find a match or plan a pickup in seconds.
+                    Make a coffee scrub at the kiosk.
                   </p>
                 </div>
                 <ArrowRight className="h-5 w-5 shrink-0 text-smu-gold-light transition-transform group-hover:translate-x-1" />
@@ -346,7 +344,7 @@ export function SiteHeader() {
                 className="w-full border-0 border-b border-white/60 bg-transparent pb-4 font-sans text-[34px] font-extralight leading-tight text-white placeholder:text-white/35 focus:border-white focus:outline-none md:text-[50px]"
               />
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-white/55">
-                <span>Try “marketplace”, “impact” or “Grounds AI”.</span>
+                <span>Try “marketplace”, “impact” or “kiosk”.</span>
                 <span>Hit enter to search or ESC to close</span>
               </div>
 
@@ -369,7 +367,7 @@ export function SiteHeader() {
                 ))}
                 {results.length === 0 && (
                   <p className="text-[15px] text-white/60">
-                    No matches yet. Try a broader term, or ask Grounds AI.
+                    No matches yet. Try a broader term.
                   </p>
                 )}
               </div>

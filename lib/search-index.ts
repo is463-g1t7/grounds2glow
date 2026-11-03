@@ -2,7 +2,7 @@ export const searchIndex = [
   { title: "Circular Coffee overview", description: "The programme, the loop and the people behind it.", href: "/" },
   { title: "Live operations dashboard", description: "Every bin, every gram, in real time.", href: "/dashboard" },
   { title: "Grounds marketplace", description: "Claim fresh grounds for a garden, classroom or workshop.", href: "/marketplace" },
-  { title: "Grounds AI", description: "Ask questions, find matches and plan pickups.", href: "/assistant" },
+  { title: "Grounds marketplace", description: "Claim fresh grounds for a garden, classroom or workshop.", href: "/marketplace" },
   { title: "Scale scanner", description: "Read a floor-scale LCD and post the weight.", href: "/scan" },
   { title: "OCR reader", description: "Upload a photo and inspect the extracted text.", href: "/ocr" },
   { title: "Cleaner app", description: "Scan a staff pass, pick a pantry and weigh a drop-off.", href: "/cleaner" },

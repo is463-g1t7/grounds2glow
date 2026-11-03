@@ -196,14 +196,6 @@ export function SiteFooter() {
                 <FooterLink href="https://library.smu.edu.sg">Libraries</FooterLink>
               </li>
               <li>
-                <Link href="/assistant"
-                  className="inline-flex items-center gap-1.5 text-[14px] leading-[21px] text-white/80 transition-colors hover:text-white"
-                >
-                  Ask Grounds AI
-                  <ArrowUpRight className="h-3.5 w-3.5 text-white/55" />
-                </Link>
-              </li>
-              <li>
                 <Link href="/kiosk"
                   className="inline-flex items-center gap-1.5 text-[14px] leading-[21px] text-white/80 transition-colors hover:text-white"
                 >

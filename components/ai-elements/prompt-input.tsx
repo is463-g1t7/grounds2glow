@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowUp, ChevronDown, Paperclip, Sparkles } from "lucide-react";
+import { ArrowUp, Paperclip, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Based on shadcn/ui AI Elements Prompt Input: https://ui.shadcn.com/docs/ai-elements/base/prompt-input */
@@ -10,7 +9,7 @@ export function PromptInput({
   onChange,
   onSubmit,
   disabled,
-  placeholder = "Ask Grounds AI anything about campus coffee…",
+  placeholder = "Ask about your coffee scrub…",
   className,
 }: {
   value: string;
@@ -20,8 +19,6 @@ export function PromptInput({
   placeholder?: string;
   className?: string;
 }) {
-  const [modelOpen, setModelOpen] = useState(false);
-
   return (
     <form
       onSubmit={(e) => {
@@ -33,11 +30,11 @@ export function PromptInput({
         className
       )}
     >
-      <label htmlFor="grounds-ai-input" className="sr-only">
-        Message Grounds AI
+      <label htmlFor="kiosk-chat-input" className="sr-only">
+        Message Grounds to Glow
       </label>
       <textarea
-        id="grounds-ai-input"
+        id="kiosk-chat-input"
         rows={2}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -58,39 +55,10 @@ export function PromptInput({
         >
           <Paperclip className="h-4 w-4" />
         </button>
-        <div className="relative ml-auto">
-          <button
-            type="button"
-            onClick={() => setModelOpen((o) => !o)}
-            aria-expanded={modelOpen}
-            className="flex items-center gap-1.5 rounded-full border border-black/10 px-2.5 py-1 text-[12px] font-medium text-smu-muted transition-colors hover:border-black/20 hover:text-smu-navy"
-          >
-            <Sparkles className="h-3 w-3 text-smu-gold" />
-            Grounds AI
-            <ChevronDown className="h-3 w-3 text-black/35" />
-          </button>
-          {modelOpen && (
-            <div className="absolute bottom-full right-0 mb-2 w-56 rounded-lg border border-black/10 bg-white p-1.5 shadow-lg">
-              {[
-                ["Grounds AI · Flash", "Fast answers, best for lookups"],
-                ["Grounds AI · Deep", "Careful planning and reports"],
-              ].map(([name, note], i) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setModelOpen(false)}
-                  className={cn(
-                    "block w-full rounded px-2.5 py-2 text-left transition-colors hover:bg-smu-cream",
-                    i === 0 && "bg-smu-cream/60"
-                  )}
-                >
-                  <span className="block text-[13px] font-semibold text-smu-navy">{name}</span>
-                  <span className="block text-[11px] text-smu-muted">{note}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <span className="ml-auto flex items-center gap-1.5 rounded-full border border-black/10 px-2.5 py-1 text-[12px] font-medium text-smu-muted">
+          <Sparkles className="h-3 w-3 text-smu-gold" />
+          GLM 5.3 Flash
+        </span>
         <button
           type="submit"
           disabled={disabled || !value.trim()}

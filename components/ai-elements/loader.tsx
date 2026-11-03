@@ -3,7 +3,7 @@
 export function Loader() {
   return (
     <span className="inline-flex items-center gap-1 text-[12px] text-smu-muted" role="status">
-      <span className="sr-only">Grounds AI is thinking</span>
+      <span className="sr-only">Assistant is thinking</span>
       {[0, 150, 300].map((delay) => (
         <span
           key={delay}

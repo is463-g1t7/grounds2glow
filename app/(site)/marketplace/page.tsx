@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -13,14 +12,12 @@ import {
   Package,
   Scale,
   Search,
-  Sparkles,
   Truck,
   Warehouse,
   X,
 } from "lucide-react";
 import { PageHeader } from "@/components/smu/PageChrome";
 import { Toast } from "@/components/smu/Toast";
-import { Suggestions, Suggestion } from "@/components/ai-elements/suggestion";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import type { Listing } from "@/lib/types";
 import { formatKg } from "@/lib/utils";
@@ -46,10 +43,8 @@ export default function MarketplacePage() {
   const [building, setBuilding] = useState("All buildings");
   const [type, setType] = useState<(typeof typeOptions)[number]>("All types");
   const [sort, setSort] = useState("Newest");
-  const [matchText, setMatchText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
-  const router = useRouter();
 
   const buildings = useMemo(
     () => ["All buildings", ...Array.from(new Set(listings.map((l) => l.building)))],
@@ -91,12 +86,6 @@ export default function MarketplacePage() {
     }
   };
 
-  const startMatch = (text: string) => {
-    const value = text.trim() || matchText.trim();
-    if (!value) return;
-    router.push(`/assistant?q=${encodeURIComponent(value)}`);
-  };
-
   const claimedCount = listings.filter((l) => l.claimed).length;
 
   return (
@@ -106,14 +95,9 @@ export default function MarketplacePage() {
         lead="Fresh spent coffee grounds from across campus — weighed, sealed and ready for their next purpose."
         crumbs={[{ label: "Home", href: "/" }, { label: "Marketplace" }]}
         actions={
-          <>
-            <Link href="/assistant" className="btn-smu btn-smu-outline">
-              <Sparkles className="h-3.5 w-3.5" /> Ask Grounds AI
-            </Link>
-            <button type="button" onClick={() => setListOpen(true)} className="btn-smu btn-smu-gold">
-              <Package className="h-3.5 w-3.5" /> List a batch
-            </button>
-          </>
+          <button type="button" onClick={() => setListOpen(true)} className="btn-smu btn-smu-gold">
+            <Package className="h-3.5 w-3.5" /> List a batch
+          </button>
         }
       />
 
@@ -122,54 +106,28 @@ export default function MarketplacePage() {
           <div className="overflow-hidden rounded bg-smu-navy text-white">
             <div className="grid gap-6 p-6 md:grid-cols-12 md:items-center md:p-8">
               <div className="md:col-span-5">
-                <p className="eyebrow text-white/55">Grounds AI matching</p>
-                <h2 className="mt-2 display-h3 text-white">Tell us what you&apos;re growing</h2>
+                <p className="eyebrow text-white/55">Collecting grounds</p>
+                <h2 className="mt-2 display-h3 text-white">Reserve a batch in three steps</h2>
                 <p className="mt-2 max-w-md text-[14px] leading-6 text-white/70">
-                  Describe the use case — a garden bed, a workshop, a research trial — and Grounds
-                  AI will shortlist the best batches by weight, freshness and walking distance.
+                  Find a batch that suits your project, claim it, then collect it during the
+                  stated pickup window.
                 </p>
               </div>
-              <div className="md:col-span-7">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    startMatch(matchText);
-                  }}
-                  className="flex flex-col gap-2 sm:flex-row"
-                >
-                  <label htmlFor="match-input" className="sr-only">
-                    Describe what you need
-                  </label>
-                  <input
-                    id="match-input"
-                    value={matchText}
-                    onChange={(e) => setMatchText(e.target.value)}
-                    placeholder="I need 20 kg for a community garden this week…"
-                    className="min-w-0 flex-1 rounded border border-white/25 bg-white/10 px-4 py-2.5 text-[14px] text-white placeholder:text-white/45 focus:border-smu-gold-light focus:bg-white/15 focus:outline-none"
-                  />
-                  <button type="submit" className="btn-smu btn-smu-light shrink-0">
-                    Find my match <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                </form>
-                <Suggestions className="mt-3">
-                  {[
-                    "20 kg for a community garden",
-                    "Small batch for a classroom",
-                    "Nitrogen-rich for compost",
-                  ].map((prompt) => (
-                    <Suggestion
-                      key={prompt}
-                      onClick={() => {
-                        setMatchText(prompt);
-                        startMatch(prompt);
-                      }}
-                      className="border-smu-gold-light/40 bg-transparent text-white/80 hover:border-smu-gold-light hover:bg-white/5 hover:text-white"
-                    >
-                      {prompt}
-                    </Suggestion>
-                  ))}
-                </Suggestions>
-              </div>
+              <ol className="grid gap-3 sm:grid-cols-3 md:col-span-7">
+                {[
+                  ["01", "Find a batch", "Filter by building, type or weight."],
+                  ["02", "Claim it", "Reserve the batch for your project."],
+                  ["03", "Collect", "Pick it up during the stated window."],
+                ].map(([step, title, text]) => (
+                  <li key={step} className="rounded border border-white/15 bg-white/5 p-4">
+                    <span className="font-display text-[24px] leading-6 text-smu-gold-light">
+                      {step}
+                    </span>
+                    <p className="mt-2 text-[14px] font-semibold text-white">{title}</p>
+                    <p className="mt-1 text-[12px] leading-5 text-white/60">{text}</p>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
 
@@ -311,11 +269,8 @@ export default function MarketplacePage() {
                 <Coffee className="mx-auto h-8 w-8 text-smu-gold" />
                 <h3 className="mt-3 font-display text-[24px] text-smu-navy">No batches match yet</h3>
                 <p className="mt-1 text-[14px] text-smu-muted">
-                  Try a broader filter, or ask Grounds AI to find a match for your use case.
+                  Try a broader filter or a different building.
                 </p>
-                <Link href="/assistant" className="btn-smu btn-smu-gold mt-4">
-                  Ask Grounds AI <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
               </div>
             )}
           </div>
@@ -326,9 +281,6 @@ export default function MarketplacePage() {
                 <p className="text-[16px] font-bold leading-6 text-black">Handling guide</p>
                 <h2 className="display-h2 mt-2 text-smu-navy">How every batch is handled</h2>
               </div>
-              <Link href="/assistant" className="text-link text-[13px]">
-                Ask about storage <ArrowUpRight className="h-3.5 w-3.5" />
-              </Link>
             </div>
             <div className="mt-5 grid gap-5 md:grid-cols-3">
               {[

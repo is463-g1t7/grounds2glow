@@ -549,7 +549,7 @@ export function DashboardClient() {
                   <Sparkles className="h-3.5 w-3.5 text-smu-gold-light" />
                 </span>
                 <div>
-                  <p className="font-display text-[16px] uppercase tracking-[0.6px]">Grounds AI</p>
+                  <p className="font-display text-[16px] uppercase tracking-[0.6px]">Operations insight</p>
                   <p className="text-[10.5px] text-white/40">Live operational insight</p>
                 </div>
                 <span className="ml-auto rounded-full bg-white/10 px-2 py-0.5 text-[9.5px] uppercase tracking-[1px] text-white/60">Beta</span>
@@ -560,9 +560,6 @@ export function DashboardClient() {
                   <button type="button" onClick={() => setInsightIndex((i) => i + 1)} className="inline-flex items-center gap-1.5 rounded-full border border-white/20 px-3 py-1.5 text-[11.5px] text-white/75 transition-colors hover:border-white/40 hover:text-white">
                     <RefreshCw className="h-3 w-3" /> Another insight
                   </button>
-                  <Link href="/assistant" className="inline-flex items-center gap-1.5 rounded-full border border-smu-gold-light/50 px-3 py-1.5 text-[11.5px] font-semibold text-smu-gold-light transition-colors hover:bg-white/5 hover:text-white">
-                    Ask a question <ArrowUpRight className="h-3 w-3" />
-                  </Link>
                 </div>
                 <p className="mt-auto border-t border-white/10 pt-4 text-[10.5px] text-white/40">
                   Based on bin telemetry, pantry history and the 7-day target.

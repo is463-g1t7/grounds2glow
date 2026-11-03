@@ -53,7 +53,7 @@ const quizQuestions: { question: string; answers: QuizAnswer[] }[] = [
   },
 ];
 
-function getBuiltInGuidance(question: string) {
+function getBuiltInGuidance(question: string): string | null {
   const text = question.toLowerCase();
   if (/(what is this|what'?s this|what is grounds to glow|tell me about this)/.test(text)) {
     return "This is Grounds to Glow, an initiative by SMU’s Office of Campus Infrastructure & Services (OCIS). The kiosk gives used coffee grounds from across SMU a second life as a DIY body scrub, helping reduce campus waste, raise environmental awareness and promote circularity.";
@@ -73,10 +73,10 @@ function getBuiltInGuidance(question: string) {
   if (/(where|come from|collect|bin|building|volunteer|dehydrat|drying|kiosk work)/.test(text)) {
     return "Used coffee grounds are collected from staff pantries across SMU’s seven buildings in smart collection bins. Volunteers transport them to the kiosk, where a solar dehydrator dries the grounds before they are prepared for scrub use, subject to appropriate hygiene and safety checks. The kiosk’s smart dispenser then measures the main ingredients.";
   }
-  if (/(benefit|skin|smooth|exfoliat|antioxidant|refresh)/.test(text)) {
+  if (/(benefit|benefits|antioxidant|exfoliat|good for (my )?skin|help (my )?skin|smooth(er)? skin)/.test(text)) {
     return "Coffee scrubs may help remove dead skin cells so skin feels smoother and softer, and exfoliation may temporarily improve its appearance and texture. Coffee contains antioxidant compounds, but the benefits of applying grounds directly to skin are not well established. Its aroma may also make exfoliation enjoyable.";
   }
-  if (/(use|apply|shower|rinse|body)/.test(text)) {
+  if (/(how (do|should|can) i (use|apply)|use (the|this) scrub|apply (the|this) scrub|in the shower|rinse (it|the scrub)|body skin)/.test(text)) {
     return "Apply a small amount to clean, damp body skin and massage gently in circular motions without excessive scrubbing. Do not use it on your face, around your eyes, or on broken or irritated skin. Rinse with lukewarm water and gently pat dry.";
   }
   if (/(sensitive|allerg|warning|face|eye|rash|reaction|itch|burn|irritat|damaged)/.test(text)) {
@@ -91,7 +91,7 @@ function getBuiltInGuidance(question: string) {
   if (/(waste|environment|sustain|reuse|repurpose|circular|why)/.test(text)) {
     return "Grounds to Glow repurposes used coffee grounds into a DIY body scrub instead of treating them as immediate waste. The proposed SMU initiative aims to reduce campus waste, increase environmental awareness and promote circularity within the SMU community.";
   }
-  return "That information is unavailable in the Grounds to Glow materials I was given. I can help with the SMU project, collection process, solar dehydrator, kiosk, recipe, skincare quiz, safe use and storage.";
+  return null;
 }
 
 export function KioskChat({ className = "" }: { className?: string }) {
@@ -176,20 +176,52 @@ export function KioskChat({ className = "" }: { className?: string }) {
     }, 250);
   };
 
-  const sendMessage = (text = input) => {
+  const sendMessage = async (text = input) => {
     const clean = text.trim();
     if (!clean || loading) return;
     setMessages((current) => [...current, { role: "user", content: clean }]);
     setInput("");
     setLoading(true);
     setQuizStep(null);
-    window.setTimeout(() => {
+
+    const builtIn = getBuiltInGuidance(clean);
+    if (builtIn) {
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      setMessages((current) => [...current, { role: "assistant", content: builtIn }]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/kiosk-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ prompt: clean }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        content?: string;
+        error?: string;
+      };
+      if (!response.ok || !body.content) {
+        throw new Error(body.error ?? `Chat failed (${response.status}).`);
+      }
       setMessages((current) => [
         ...current,
-        { role: "assistant", content: getBuiltInGuidance(clean) },
+        { role: "assistant", content: body.content as string },
       ]);
+    } catch {
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content:
+            "I couldn't reach the live guide just now. I can still help with the SMU project, collection process, solar dehydrator, kiosk, recipe, skincare quiz, safe use and storage.",
+        },
+      ]);
+    } finally {
       setLoading(false);
-    }, 650);
+    }
   };
 
   return (
@@ -337,7 +369,7 @@ export function KioskChat({ className = "" }: { className?: string }) {
           placeholder="Ask about your coffee scrub…"
         />
         <p className="mt-2 text-center text-[10px] text-black/30">
-          Built-in guide · don&apos;t share personal or medical information.
+          Answers may use an AI model · don&apos;t share personal or medical information.
         </p>
       </div>
     </div>

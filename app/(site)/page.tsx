@@ -25,9 +25,9 @@ const loop = [
   },
   {
     title: "Match every batch",
-    text: "Grounds AI connects fresh batches with gardeners, researchers and makers who can use them.",
+    text: "The marketplace connects fresh batches with gardeners, researchers and makers who can use them.",
     image: "/images/coffee-beans.jpg",
-    href: "/assistant",
+    href: "/marketplace",
   },
   {
     title: "Prove every kilogram",
@@ -66,10 +66,10 @@ const nextSteps = [
     href: "/marketplace",
   },
   {
-    title: "Ask Grounds AI",
-    text: "Find a match, explain the impact or plan a pickup in seconds.",
-    image: "/images/programme-intro.jpg",
-    href: "/assistant",
+    title: "Visit the kiosk",
+    text: "See how spent grounds become a Grounds to Glow coffee scrub.",
+    image: "/images/coffee-cup.jpg",
+    href: "/kiosk",
   },
 ];
 
@@ -207,8 +207,8 @@ export default function Home() {
               <Link href="/dashboard#impact" className="btn-smu btn-smu-gold">
                 Open impact report <span aria-hidden="true">»</span>
               </Link>
-              <Link href="/assistant" className="btn-smu btn-smu-light">
-                Ask Grounds AI <span aria-hidden="true">»</span>
+              <Link href="/marketplace" className="btn-smu btn-smu-light">
+                Find a batch <span aria-hidden="true">»</span>
               </Link>
             </div>
             <p className="mt-5 flex items-center gap-2 text-[12px] text-white/45">
@@ -276,9 +276,9 @@ export default function Home() {
             <Link href="/#news" className="btn-smu btn-smu-outline">
               Browse all articles <span aria-hidden="true">»</span>
             </Link>
-            <Link href="/assistant" className="btn-smu btn-smu-gold">
+            <a href="mailto:enquiry@smu.edu.sg?subject=Circular%20Coffee%20updates" className="btn-smu btn-smu-gold">
               Subscribe to the update <span aria-hidden="true">»</span>
-            </Link>
+            </a>
           </div>
         </div>
       </section>
@@ -296,9 +296,9 @@ export default function Home() {
                 partners to turn a waste stream into a shared resource. Bring us a use case and
                 we&apos;ll help you test it on campus.
               </p>
-              <Link href="/assistant" className="btn-smu btn-smu-light mt-6">
+              <a href="mailto:enquiry@smu.edu.sg?subject=Circular%20Coffee%20partnership" className="btn-smu btn-smu-light mt-6">
                 Become a partner <span aria-hidden="true">»</span>
-              </Link>
+              </a>
             </div>
             <div className="min-h-[280px] lg:min-h-full">
               <img
@@ -385,12 +385,12 @@ export default function Home() {
                     <MapPin className="h-3.5 w-3.5" />
                     {event.venue}
                   </p>
-                  <Link
-                    href="/assistant"
+                  <a
+                    href={`mailto:enquiry@smu.edu.sg?subject=${encodeURIComponent(event.title)}`}
                     className="text-link mt-4 border-t border-black/10 pt-3 text-[13px]"
                   >
                     Event details <ArrowUpRight className="h-3.5 w-3.5" />
-                  </Link>
+                  </a>
                 </div>
               </article>
             ))}
@@ -506,8 +506,8 @@ export default function Home() {
             <Sparkles className="h-3.5 w-3.5 text-smu-gold" />
             A student-built prototype for the SMU Circular Coffee programme.
           </p>
-          <Link href="/assistant" className="text-link text-[12px]">
-            Ask Grounds AI <ArrowRight className="h-3.5 w-3.5" />
+          <Link href="/kiosk" className="text-link text-[12px]">
+            Visit Grounds to Glow <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
