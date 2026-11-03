@@ -1,10 +1,10 @@
-import { db } from "@/lib/db";
+import { getDb } from "@/lib/db";
 import { getBootstrap } from "@/lib/queries";
 import { seedDatabase } from "@/scripts/seed";
 
 export async function POST() {
   try {
-    await seedDatabase(db);
+    await seedDatabase(getDb());
     const data = await getBootstrap();
     return Response.json(data);
   } catch (error) {

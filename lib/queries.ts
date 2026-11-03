@@ -1,6 +1,6 @@
 import "server-only";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { db } from "./db";
+import { getDb } from "./db";
 import {
   binEvents,
   bins,
@@ -66,6 +66,7 @@ function toListing(r: ListingRow): Listing {
 }
 
 export async function getBins(): Promise<Bin[]> {
+  const db = getDb();
   const rows = await db.select().from(bins).orderBy(asc(bins.short));
   return rows.map((r) => ({
     id: r.id,
@@ -80,12 +81,14 @@ export async function getBins(): Promise<Bin[]> {
 }
 
 export async function getEvents(limit?: number): Promise<BinEvent[]> {
+  const db = getDb();
   const query = db.select().from(binEvents).orderBy(desc(binEvents.at));
   const rows = limit ? await query.limit(limit) : await query;
   return rows.map(toEvent);
 }
 
 export async function getCleaners(): Promise<Cleaner[]> {
+  const db = getDb();
   const rows = await db.select().from(cleaners).orderBy(asc(cleaners.name));
   return rows.map((r) => ({
     id: r.id,
@@ -98,11 +101,13 @@ export async function getCleaners(): Promise<Cleaner[]> {
 }
 
 export async function getListings(): Promise<Listing[]> {
+  const db = getDb();
   const rows = await db.select().from(listings).orderBy(desc(listings.createdAt));
   return rows.map(toListing);
 }
 
 export async function getNews(): Promise<NewsItem[]> {
+  const db = getDb();
   const rows = await db
     .select()
     .from(newsItems)
@@ -118,6 +123,7 @@ export async function getNews(): Promise<NewsItem[]> {
 }
 
 export async function getProgrammeEvents(): Promise<ProgrammeEvent[]> {
+  const db = getDb();
   const rows = await db
     .select()
     .from(programmeEvents)
@@ -133,6 +139,7 @@ export async function getProgrammeEvents(): Promise<ProgrammeEvent[]> {
 }
 
 export async function getMetrics(): Promise<ProgrammeMetric[]> {
+  const db = getDb();
   const rows = await db.select().from(programmeMetrics).orderBy(asc(programmeMetrics.sort));
   return rows.map((r) => ({
     key: r.key,
@@ -179,6 +186,7 @@ type ReadingInput = {
  * from the last known total. Returns null when the reading is not an increase.
  */
 export async function createReading(input: ReadingInput): Promise<BinEvent | null> {
+  const db = getDb();
   return db.transaction(async (tx) => {
     const [bin] = await tx.select().from(bins).where(eq(bins.id, input.binId)).for("update");
     if (!bin) throw new Error("Unknown bin.");
@@ -226,6 +234,7 @@ export async function collectBin(
   binId: string,
   cleanerId?: string | null
 ): Promise<BinEvent | null> {
+  const db = getDb();
   return db.transaction(async (tx) => {
     const [bin] = await tx.select().from(bins).where(eq(bins.id, binId)).for("update");
     if (!bin) throw new Error("Unknown bin.");
@@ -268,6 +277,7 @@ export async function createListing(input: {
   tags: string[];
   note: string;
 }): Promise<Listing> {
+  const db = getDb();
   const id = `G-${Date.now().toString(36).toUpperCase()}`;
   const [row] = await db
     .insert(listings)
@@ -288,6 +298,7 @@ export async function createListing(input: {
 }
 
 export async function claimListing(id: string): Promise<Listing | null> {
+  const db = getDb();
   return db.transaction(async (tx) => {
     const [row] = await tx
       .update(listings)
