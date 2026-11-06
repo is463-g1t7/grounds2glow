@@ -16,6 +16,7 @@
     "db:reset": "bun run db:migrate && bun run db:seed"
   },
   "dependencies": {
+    "barcode-detector": "^3.2.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.4",
     "lucide-react": "^1.67.0",
