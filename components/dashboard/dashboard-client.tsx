@@ -600,9 +600,6 @@ export function DashboardClient() {
             <span>
               Weighing by hand? <Link href="/scan" className="font-semibold text-smu-gold underline underline-offset-2">Scan the scale</Link> or <Link href="/ocr" className="font-semibold text-smu-gold underline underline-offset-2">upload a scale photo</Link>.
             </span>
-            <Link href="/marketplace" className="ml-auto inline-flex items-center gap-1 font-semibold text-smu-navy">
-              Browse the marketplace <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
           </div>
         </div>
       </section>

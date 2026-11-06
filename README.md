@@ -5,14 +5,13 @@ Postgres and Drizzle ORM, and uses the SMU design system from `../docs/DESIGN.md
 
 ## What is in here
 
-- Public programme landing page, live operations dashboard, marketplace and programme reporting.
+- Public programme landing page, live operations dashboard and programme reporting.
 - Cleaner flow: pass scan → pantry picker → weigh station, with a printable pass sheet.
 - Scale scanner and OCR reader tools.
 - Grounds to Glow kiosk: welcome, check-in, QR guide, recipe, dispensing, thanks and
   `?chat=1` mobile chat. Common questions get deterministic answers; other questions go to
   OpenRouter using `z-ai/glm-5.3-flash` with a kiosk-specific system prompt.
-- Postgres-backed bins, audit events, cleaners, marketplace listings/claims, news,
-  programme events and programme metrics.
+- Postgres-backed bins, audit events, cleaners, news, programme events and programme metrics.
 - Drizzle schema (`db/schema.ts`), generated migrations (`db/migrations/`) and a single
   seed script (`scripts/seed.ts`).
 
@@ -42,7 +41,7 @@ bun run db:up        # start Postgres 18
 bun run db:generate  # generate a new SQL migration from db/schema.ts
 bun run db:migrate   # apply pending Drizzle migrations
 bun run db:seed      # load scripts/seed.ts data
-bun run db:check     # verify seeded history, weights and claims agree
+bun run db:check     # verify seeded history and weights agree
 bun run db:reset     # migrate + seed
 bun run db:down      # stop the container (volume is kept)
 ```
@@ -77,8 +76,8 @@ the local Docker database.
 | `bins` | Seven building bins, current weight, capacity, pantry levels |
 | `cleaners` | Demo staff roster and pass numbers |
 | `bin_events` | Deposits and collections, with cleaner/source/before/after audit fields |
-| `listings` | Marketplace batches and claim state |
-| `claims` | Claim history |
+| `listings` | Unused: kept from the removed marketplace, not seeded or reset |
+| `claims` | Unused: kept from the removed marketplace, not seeded or reset |
 | `news_items` | Landing-page news cards |
 | `programme_events` | Landing-page event cards |
 | `programme_metrics` | Programme-to-date impact metrics |
@@ -92,8 +91,6 @@ All demo rows live in `scripts/seed.ts`; there are no entity data arrays in comp
 | `GET /api/bootstrap` | All data needed by the client surfaces |
 | `POST /api/readings` | Record a floor-scale reading and update the bin |
 | `POST /api/collect` | Empty a bin and write an audit event |
-| `POST /api/listings` | Create a marketplace batch |
-| `POST /api/listings/[id]/claim` | Claim a batch in a transaction |
 | `POST /api/sync` | Insert a simulated remote scale reading |
 | `POST /api/simulate` | One demo live-day step, including auto-collect |
 | `POST /api/kiosk-chat` | Grounds to Glow chat via OpenRouter |

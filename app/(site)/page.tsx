@@ -24,12 +24,6 @@ const loop = [
     href: "/dashboard",
   },
   {
-    title: "Match every batch",
-    text: "The marketplace connects fresh batches with gardeners, researchers and makers who can use them.",
-    image: "/images/coffee-beans.jpg",
-    href: "/marketplace",
-  },
-  {
     title: "Prove every kilogram",
     text: "Diversion, CO₂e avoided and monthly reporting — evidence that the loop is working.",
     image: "/images/garden.jpg",
@@ -39,7 +33,6 @@ const loop = [
 
 const roles = [
   { label: "For pantry staff", href: "/dashboard" },
-  { label: "For gardeners & makers", href: "/marketplace" },
   { label: "For campus partners", href: "/#partners" },
 ];
 
@@ -58,12 +51,6 @@ const nextSteps = [
     text: "Pantry champions can record a collection in under a minute.",
     image: "/images/coffee-machine.jpg",
     href: "/dashboard",
-  },
-  {
-    title: "Claim grounds",
-    text: "Browse fresh batches across campus and reserve what you need.",
-    image: "/images/garden.jpg",
-    href: "/marketplace",
   },
   {
     title: "Visit the kiosk",
@@ -122,9 +109,6 @@ export default function Home() {
                 student projects and products for the SMU community.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href="/marketplace" className="btn-smu btn-smu-outline">
-                  Find a drop-off point <span aria-hidden="true">»</span>
-                </Link>
                 <Link href="/dashboard" className="btn-smu btn-smu-outline">
                   How it works <span aria-hidden="true">»</span>
                 </Link>
@@ -134,7 +118,7 @@ export default function Home() {
                 <p className="max-w-[180px] text-[13px] font-semibold leading-5 text-white/90">
                   Explore the loop by role
                 </p>
-                <div className="grid flex-1 gap-2 sm:grid-cols-3">
+                <div className="grid flex-1 gap-2 sm:grid-cols-2">
                   {roles.map((role) => (
                     <Link
                       key={role.label}
@@ -159,9 +143,9 @@ export default function Home() {
           <SectionHeading
             eyebrow="The circular loop"
             title="Turning waste into value"
-            lead={`Three connected products keep the loop honest: capture, match and prove. Each one is live across the ${pantryLevels} pantry levels on campus.`}
+            lead={`Two connected products keep the loop honest: capture and prove. Each one is live across the ${pantryLevels} pantry levels on campus.`}
           />
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
             {loop.map((item) => (
               <Link
                 key={item.title}
@@ -206,9 +190,6 @@ export default function Home() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/dashboard#impact" className="btn-smu btn-smu-gold">
                 Open impact report <span aria-hidden="true">»</span>
-              </Link>
-              <Link href="/marketplace" className="btn-smu btn-smu-light">
-                Find a batch <span aria-hidden="true">»</span>
               </Link>
             </div>
             <p className="mt-5 flex items-center gap-2 text-[12px] text-white/45">
@@ -449,7 +430,7 @@ export default function Home() {
       <section className="bg-smu-cream pb-24">
         <div className="container-smu">
           <SectionHeading eyebrow="Continue your journey" title="Take the next step" />
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
             {nextSteps.map((step) => (
               <Link
                 key={step.title}

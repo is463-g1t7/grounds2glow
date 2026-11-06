@@ -8,8 +8,6 @@ const bins = await pool.query("select id, weight_kg::float8 as weight, capacity_
 const events = await pool.query(
   "select id, at, bin_id, type, kg::float8 as kg, before_kg::float8 as before, after_kg::float8 as after from bin_events order by bin_id, at"
 );
-const claims = await pool.query("select count(*)::int as count from claims");
-const claimed = await pool.query("select count(*)::int as count from listings where claimed");
 
 let failures = 0;
 function check(ok: boolean, message: string) {
@@ -38,7 +36,6 @@ for (const bin of bins.rows) {
   );
 }
 
-check(claims.rows[0].count === claimed.rows[0].count, "claims rows match claimed listings");
 await pool.end();
 if (failures) {
   console.error(`${failures} check(s) failed`);

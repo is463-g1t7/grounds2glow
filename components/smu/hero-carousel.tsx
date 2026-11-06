@@ -20,13 +20,6 @@ const buildSlides = (pantryLevels: number) => [
     cta: "View live impact",
     href: "/dashboard#impact",
   },
-  {
-    image: "/images/garden.jpg",
-    title: "Good grounds, new ground",
-    body: "Claim fresh grounds for your garden, classroom or workshop. Every batch is weighed, listed and ready for its next purpose.",
-    cta: "Browse the marketplace",
-    href: "/marketplace",
-  },
 ];
 
 export function HeroCarousel({ pantryLevels }: { pantryLevels: number }) {
