@@ -10,6 +10,9 @@ export const SCALE_FRAMES = [
 
 export type ScaleFrame = (typeof SCALE_FRAMES)[number];
 
+/** LCD window within the overhead frames (fractions of width/height). */
+export const SCALE_LCD = { x: 0.425, y: 0.12, w: 0.15, h: 0.12 };
+
 /** Random frame whose reading is above the bin's current total; null if none is. */
 export function pickFrame(currentKg: number, exclude?: string): ScaleFrame | null {
   const ok = SCALE_FRAMES.filter((f) => f.refKg > currentKg + 0.05 && f.src !== exclude);

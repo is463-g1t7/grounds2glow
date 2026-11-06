@@ -94,7 +94,14 @@ function getBuiltInGuidance(question: string): string | null {
   return null;
 }
 
-export function KioskChat({ className = "" }: { className?: string }) {
+export function KioskChat({
+  className = "",
+  embedded = false,
+}: {
+  className?: string;
+  /** Inside a longer page: scroll the conversation only, never the page around it. */
+  embedded?: boolean;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -116,8 +123,13 @@ export function KioskChat({ className = "" }: { className?: string }) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (embedded) {
+      const log = endRef.current?.closest('[role="log"]');
+      log?.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+      return;
+    }
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading, quizStep]);
+  }, [messages, loading, quizStep, embedded]);
 
   const startQuiz = () => {
     setRecommendation(null);
@@ -368,7 +380,7 @@ export function KioskChat({ className = "" }: { className?: string }) {
           disabled={loading}
           placeholder="Ask about your coffee scrub…"
         />
-        <p className="mt-2 text-center text-[10px] text-black/30">
+        <p className="mt-2 text-center text-[11px] text-smu-muted">
           Answers may use an AI model · don&apos;t share personal or medical information.
         </p>
       </div>

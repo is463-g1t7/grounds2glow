@@ -7,5 +7,4 @@ export const searchIndex = [
   { title: "Printable staff passes", description: "Demo QR cards for the cleaner check-in.", href: "/passes" },
   { title: "Grounds to Glow kiosk", description: "The coffee scrub dispensing experience.", href: "/kiosk" },
   { title: "Impact and reporting", description: "Diversion, CO₂e avoided and monthly reporting.", href: "/dashboard#impact" },
-  { title: "Partner with us", description: "Work with SMU on circular campus projects.", href: "/#about" },
 ];

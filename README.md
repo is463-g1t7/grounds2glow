@@ -5,7 +5,9 @@ Postgres and Drizzle ORM, and uses the SMU design system from `../docs/DESIGN.md
 
 ## What is in here
 
-- Public programme landing page, live operations dashboard and programme reporting.
+- Landing page that follows the loop from pantry staff to live dashboard to kiosk, with live bin
+  data, the kiosk chat and a three-minute demo route.
+- Live operations dashboard and programme reporting.
 - Cleaner flow: pass scan → pantry picker → weigh station, with a printable pass sheet.
 - Scale scanner and OCR reader tools.
 - Grounds to Glow kiosk: welcome, check-in, QR guide, recipe, dispensing, thanks and
@@ -78,9 +80,9 @@ the local Docker database.
 | `bin_events` | Deposits and collections, with cleaner/source/before/after audit fields |
 | `listings` | Unused: kept from the removed marketplace, not seeded or reset |
 | `claims` | Unused: kept from the removed marketplace, not seeded or reset |
-| `news_items` | Landing-page news cards |
-| `programme_events` | Landing-page event cards |
-| `programme_metrics` | Programme-to-date impact metrics |
+| `news_items` | Unused: no longer shown on the landing page |
+| `programme_events` | Unused: no longer shown on the landing page |
+| `programme_metrics` | Programme-to-date impact metrics, set by the seed script |
 
 All demo rows live in `scripts/seed.ts`; there are no entity data arrays in components.
 
@@ -91,10 +93,14 @@ All demo rows live in `scripts/seed.ts`; there are no entity data arrays in comp
 | `GET /api/bootstrap` | All data needed by the client surfaces |
 | `POST /api/readings` | Record a floor-scale reading and update the bin |
 | `POST /api/collect` | Empty a bin and write an audit event |
-| `POST /api/sync` | Insert a simulated remote scale reading |
-| `POST /api/simulate` | One demo live-day step, including auto-collect |
+| `POST /api/sync` | Insert a simulated remote scale reading (demo controls only) |
+| `POST /api/simulate` | One demo live-day step, including auto-collect (demo controls only) |
 | `POST /api/kiosk-chat` | Grounds to Glow chat via OpenRouter |
-| `POST /api/reset` | Re-run `scripts/seed.ts` |
+| `POST /api/reset` | Re-run `scripts/seed.ts` (demo controls only) |
+
+Reset, Sync and Simulate return 403, and their buttons stay hidden, unless
+`NEXT_PUBLIC_DEMO_CONTROLS=true` is set. Leave it unset on shared deployments, because anyone who
+can reach the site could otherwise wipe the bin history.
 
 ## Design
 
@@ -104,7 +110,8 @@ display, Libre Franklin for body text, SMU gold `#8A704C`, navy `#141B4D` and li
 footer matching the reference site.
 
 The implementation is a port of the Vite design prototype in
-`../.scratch/smu-redesign`; the landing page and product surfaces are intentionally 1:1.
+`../.scratch/smu-redesign`; the product surfaces are intentionally 1:1. The landing page has since
+been rebuilt around the loop (see `PRODUCT.md`).
 
 ## Verification
 

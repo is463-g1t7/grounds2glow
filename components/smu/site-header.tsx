@@ -36,23 +36,21 @@ const nav: NavItem[] = [
     ],
   },
   {
-    label: "Programme",
-    href: "/#programme",
+    label: "The loop",
+    href: "/#loop",
     children: [
-      { label: "How it works", href: "/#programme", description: "From pantry to purpose" },
-      { label: "Our partners", href: "/#partners", description: "The people keeping the loop turning" },
-      { label: "Latest updates", href: "/#news", description: "Stories from across campus" },
+      { label: "Pantry staff", href: "/#pantry", description: "Scan a pass, pick a pantry and weigh" },
+      { label: "Smart bin OCR and dashboard", href: "/#dashboard", description: "From the scale to the live view" },
+      { label: "Grounds to Glow guide", href: "/#kiosk", description: "Ask the AI guide a question" },
+      { label: "Try the demo", href: "/#try", description: "The whole loop in three minutes" },
     ],
   },
-  { label: "News & events", href: "/#news" },
-  { label: "About", href: "/#about" },
 ];
 
 const infoFor = [
   { label: "Faculty and staff", href: "/dashboard" },
-  { label: "Campus partners", href: "/#partners" },
   { label: "Facilities teams", href: "/cleaner" },
-  { label: "Media and suppliers", href: "/#news" },
+  { label: "Kiosk visitors", href: "/kiosk" },
 ];
 
 export function SiteHeader() {
