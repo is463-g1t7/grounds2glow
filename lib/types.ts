@@ -37,22 +37,6 @@ export type BinEvent = {
   photo?: string | null;
 };
 
-export type Listing = {
-  id: string;
-  title: string;
-  type: "Espresso" | "Filter" | "Decaf";
-  weightKg: number;
-  building: string;
-  donor: string;
-  pickup: string;
-  image: string;
-  tags: string[];
-  note: string;
-  claimed: boolean;
-  claimedAt?: string | null;
-  createdAt: string;
-};
-
 export type NewsItem = {
   id: string;
   title: string;
@@ -83,7 +67,6 @@ export type BootstrapData = {
   bins: Bin[];
   events: BinEvent[];
   cleaners: Cleaner[];
-  listings: Listing[];
   news: NewsItem[];
   programmeEvents: ProgrammeEvent[];
   metrics: ProgrammeMetric[];

@@ -163,11 +163,6 @@ export default function ScanPage() {
 
       <section className="bg-smu-cream pb-20 pt-8">
         <div className="container-smu">
-          <div className="mb-4 rounded border border-smu-gold/30 bg-smu-gold/10 px-3 py-2 text-[12px] text-smu-gold-dark">
-            <strong className="font-semibold">Demo scale OCR.</strong> Camera and upload work; the
-            reading is simulated from the known scale frames.
-          </div>
-
           <div className="flex max-w-xl flex-wrap gap-3">
             <label className="flex min-w-56 flex-1 flex-col gap-1 text-[13px]">
               <span className="text-[11px] font-semibold uppercase tracking-[1px] text-smu-muted">

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/smu/page-chrome";
 import { StatStrip } from "@/components/smu/stat-strip";
+import { demoControlsEnabled } from "@/lib/demo-controls";
 import { Toast } from "@/components/smu/toast";
 import { CampusMap } from "@/components/smu/campus-map";
 import { BinSpotlight } from "@/components/dashboard/bin-spotlight";
@@ -399,13 +400,17 @@ export function DashboardClient() {
             <Link href="/cleaner" target="_blank" rel="noreferrer" className="btn-smu btn-smu-outline">
               Cleaner app <ArrowUpRight className="h-4 w-4" />
             </Link>
-            <button type="button" onClick={() => setDemoOn((v) => !v)} className="btn-smu btn-smu-outline">
-              {demoOn ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {demoOn ? "Pause live day" : "Simulate live day"}
-            </button>
-            <button type="button" onClick={resetDemo} className="btn-smu btn-smu-outline">
-              <RotateCcw className="h-4 w-4" /> Reset
-            </button>
+            {demoControlsEnabled && (
+              <>
+                <button type="button" onClick={() => setDemoOn((v) => !v)} className="btn-smu btn-smu-outline">
+                  {demoOn ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  {demoOn ? "Pause live day" : "Simulate live day"}
+                </button>
+                <button type="button" onClick={resetDemo} className="btn-smu btn-smu-outline">
+                  <RotateCcw className="h-4 w-4" /> Reset
+                </button>
+              </>
+            )}
           </>
         }
       />
@@ -462,9 +467,11 @@ export function DashboardClient() {
                 {label}
               </button>
             ))}
-            <button type="button" onClick={syncFromServer} className="ml-auto btn-smu btn-smu-outline btn-smu-sm">
-              <RefreshCw className="h-3.5 w-3.5" /> Sync{syncedAt ? ` · ${syncedAt}` : ""}
-            </button>
+            {demoControlsEnabled && (
+              <button type="button" onClick={syncFromServer} className="ml-auto btn-smu btn-smu-outline btn-smu-sm">
+                <RefreshCw className="h-3.5 w-3.5" /> Sync{syncedAt ? ` · ${syncedAt}` : ""}
+              </button>
+            )}
             <button type="button" onClick={exportReport} className="btn-smu btn-smu-outline btn-smu-sm">
               <Download className="h-3.5 w-3.5" /> Export report
             </button>
@@ -600,9 +607,6 @@ export function DashboardClient() {
             <span>
               Weighing by hand? <Link href="/scan" className="font-semibold text-smu-gold underline underline-offset-2">Scan the scale</Link> or <Link href="/ocr" className="font-semibold text-smu-gold underline underline-offset-2">upload a scale photo</Link>.
             </span>
-            <Link href="/marketplace" className="ml-auto inline-flex items-center gap-1 font-semibold text-smu-navy">
-              Browse the marketplace <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
           </div>
         </div>
       </section>

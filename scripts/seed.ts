@@ -98,22 +98,11 @@ function buildEvents(): BinEvent[] {
   ];
 }
 
-const listings = [
-  { id: "G-1042", title: "Rich espresso grounds", type: "Espresso", weightKg: 8.4, building: "Administration Building", donor: "OCIS Pantry Team", pickup: "Today · 14:00–17:00", image: "/images/coffee-grounds.jpg", tags: ["Available now", "High nitrogen"], note: "Collected this morning. Stored in the pantry bin with a sealed lid.", claimed: false },
-  { id: "G-1041", title: "Fresh filter grounds", type: "Filter", weightKg: 6.1, building: "School of Computing", donor: "SCIS Pantry Team", pickup: "Tomorrow · 09:00–12:00", image: "/images/coffee-beans.jpg", tags: ["Available now", "Compost-ready"], note: "Light roast. Ideal for worm bins and young seedlings.", claimed: false },
-  { id: "G-1039", title: "Espresso blend grounds", type: "Espresso", weightKg: 4.8, building: "Lee Kong Chian School of Business", donor: "LKCSB Pantry Team", pickup: "Today · 16:00–18:00", image: "/images/cafe.jpg", tags: ["Pickup today"], note: "Two sealed 2.4 kg tubs. Lift access from the loading bay.", claimed: false },
-  { id: "G-1037", title: "Decaf grounds", type: "Decaf", weightKg: 3.2, building: "School of Accountancy", donor: "SOA Pantry Team", pickup: "Thu · 10:00–13:00", image: "/images/coffee-cup.jpg", tags: ["Low acidity"], note: "Small batch from the Level 2 pantry. Great for indoor plants.", claimed: false },
-  { id: "G-1036", title: "Dark roast grounds", type: "Espresso", weightKg: 7.6, building: "School of Economics", donor: "SOE Pantry Team", pickup: "Today · 15:00–18:00", image: "/images/coffee-pour.jpg", tags: ["Available now", "Bulk"], note: "Best matched with the SOSS garden project this week.", claimed: false },
-  { id: "G-1034", title: "Light roast grounds", type: "Filter", weightKg: 5.4, building: "School of Social Sciences", donor: "SOSS Pantry Team", pickup: "Fri · 09:00–12:00", image: "/images/plants.jpg", tags: ["Reserved"], note: "Reserved for the SOSS community garden. Backup requests welcome.", claimed: true },
-  { id: "G-1032", title: "Espresso grounds", type: "Espresso", weightKg: 2.9, building: "Yong Pung How School of Law", donor: "SOL Pantry Team", pickup: "Today · 12:00–15:00", image: "/images/garden.jpg", tags: ["Available now"], note: "One 2.9 kg tub. Please bring your own container.", claimed: false },
-  { id: "G-1030", title: "House blend grounds", type: "Filter", weightKg: 1.8, building: "College of Integrative Studies", donor: "CIS Pantry Team", pickup: "Tomorrow · 08:00–11:00", image: "/images/coffee-machine.jpg", tags: ["New"], note: "First collection from the CIS pantry. Small but mighty.", claimed: false },
-];
-
 const news = [
   { id: "news-1", title: "33 pantries now log every drop-off in real time", tag: "Programme update", publishedAt: "2026-10-28", image: "/images/coffee-machine.jpg", href: "/dashboard" },
   { id: "news-2", title: "The SOSS garden trial: 180 kg of grounds, one growing season", tag: "Impact story", publishedAt: "2026-10-21", image: "/images/garden.jpg", href: "/dashboard" },
   { id: "news-3", title: "Meet the grounds crew keeping the loop turning", tag: "Community", publishedAt: "2026-10-14", image: "/images/programme-intro.jpg", href: "/#about" },
-  { id: "news-4", title: "What we learned from our first AI matching pilot", tag: "Innovation", publishedAt: "2026-10-07", image: "/images/research-digital.webp", href: "/marketplace" },
+  { id: "news-4", title: "What we learned from our first AI matching pilot", tag: "Innovation", publishedAt: "2026-10-07", image: "/images/research-digital.webp", href: "/dashboard" },
 ];
 
 const programmeEvents = [
@@ -143,7 +132,7 @@ export async function seedDatabase(db: Database): Promise<void> {
 
   await db.transaction(async (tx) => {
     await tx.execute(
-      sql`TRUNCATE claims, bin_events, listings, news_items, programme_events, programme_metrics, bins, cleaners RESTART IDENTITY CASCADE`
+      sql`TRUNCATE bin_events, news_items, programme_events, programme_metrics, bins, cleaners RESTART IDENTITY CASCADE`
     );
 
     await tx.insert(schema.cleaners).values(cleaners);
@@ -174,29 +163,6 @@ export async function seedDatabase(db: Database): Promise<void> {
         afterKg: e.afterKg == null ? null : String(e.afterKg),
       }))
     );
-    await tx.insert(schema.listings).values(
-      listings.map((l) => ({
-        id: l.id,
-        title: l.title,
-        type: l.type,
-        weightKg: String(l.weightKg),
-        building: l.building,
-        donor: l.donor,
-        pickup: l.pickup,
-        image: l.image,
-        tags: l.tags,
-        note: l.note,
-        claimed: l.claimed,
-        claimedAt: l.claimed ? at(4) : null,
-        createdAt: at(1),
-      }))
-    );
-    const claimed = listings.filter((l) => l.claimed);
-    if (claimed.length) {
-      await tx.insert(schema.claims).values(
-        claimed.map((l) => ({ listingId: l.id, claimant: "SOSS community garden" }))
-      );
-    }
     await tx.insert(schema.newsItems).values(
       news.map((n, sort) => ({ ...n, sort }))
     );
@@ -208,7 +174,7 @@ export async function seedDatabase(db: Database): Promise<void> {
     );
   });
 
-  console.log(`seeded ${bins.length} bins, ${events.length} events, ${listings.length} listings`);
+  console.log(`seeded ${bins.length} bins, ${events.length} events`);
 }
 
 async function main() {

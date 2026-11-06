@@ -1,12 +1,10 @@
 import "server-only";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { getDb } from "./db";
 import {
   binEvents,
   bins,
-  claims,
   cleaners,
-  listings,
   newsItems,
   programmeEvents,
   programmeMetrics,
@@ -17,7 +15,6 @@ import type {
   BootstrapData,
   Cleaner,
   EventSource,
-  Listing,
   NewsItem,
   ProgrammeEvent,
   ProgrammeMetric,
@@ -25,10 +22,8 @@ import type {
 
 const num = (v: string | number | null) => Number(v ?? 0);
 const iso = (v: Date) => v.toISOString();
-const isoOrNull = (v: Date | null) => (v == null ? null : v.toISOString());
 
 type EventRow = typeof binEvents.$inferSelect;
-type ListingRow = typeof listings.$inferSelect;
 
 function toEvent(r: EventRow): BinEvent {
   return {
@@ -44,24 +39,6 @@ function toEvent(r: EventRow): BinEvent {
     beforeKg: r.beforeKg == null ? null : num(r.beforeKg),
     afterKg: r.afterKg == null ? null : num(r.afterKg),
     photo: r.photo,
-  };
-}
-
-function toListing(r: ListingRow): Listing {
-  return {
-    id: r.id,
-    title: r.title,
-    type: r.type as Listing["type"],
-    weightKg: num(r.weightKg),
-    building: r.building,
-    donor: r.donor,
-    pickup: r.pickup,
-    image: r.image,
-    tags: r.tags,
-    note: r.note,
-    claimed: r.claimed,
-    claimedAt: isoOrNull(r.claimedAt),
-    createdAt: iso(r.createdAt),
   };
 }
 
@@ -98,12 +75,6 @@ export async function getCleaners(): Promise<Cleaner[]> {
     shift: r.shift as Cleaner["shift"],
     vendor: r.vendor,
   }));
-}
-
-export async function getListings(): Promise<Listing[]> {
-  const db = getDb();
-  const rows = await db.select().from(listings).orderBy(desc(listings.createdAt));
-  return rows.map(toListing);
 }
 
 export async function getNews(): Promise<NewsItem[]> {
@@ -151,12 +122,11 @@ export async function getMetrics(): Promise<ProgrammeMetric[]> {
 }
 
 export async function getBootstrap(): Promise<BootstrapData> {
-  const [binRows, events, cleanerRows, listingRows, news, eventsProgramme, metrics] =
+  const [binRows, events, cleanerRows, news, eventsProgramme, metrics] =
     await Promise.all([
       getBins(),
       getEvents(),
       getCleaners(),
-      getListings(),
       getNews(),
       getProgrammeEvents(),
       getMetrics(),
@@ -165,7 +135,6 @@ export async function getBootstrap(): Promise<BootstrapData> {
     bins: binRows,
     events,
     cleaners: cleanerRows,
-    listings: listingRows,
     news,
     programmeEvents: eventsProgramme,
     metrics,
@@ -263,51 +232,6 @@ export async function collectBin(
       .returning();
     await tx.update(bins).set({ weightKg: "0", updatedAt: at }).where(eq(bins.id, binId));
     return toEvent(row);
-  });
-}
-
-export async function createListing(input: {
-  title: string;
-  type: Listing["type"];
-  weightKg: number;
-  building: string;
-  donor: string;
-  pickup: string;
-  image: string;
-  tags: string[];
-  note: string;
-}): Promise<Listing> {
-  const db = getDb();
-  const id = `G-${Date.now().toString(36).toUpperCase()}`;
-  const [row] = await db
-    .insert(listings)
-    .values({
-      id,
-      title: input.title,
-      type: input.type,
-      weightKg: String(input.weightKg),
-      building: input.building,
-      donor: input.donor,
-      pickup: input.pickup,
-      image: input.image,
-      tags: input.tags,
-      note: input.note,
-    })
-    .returning();
-  return toListing(row);
-}
-
-export async function claimListing(id: string): Promise<Listing | null> {
-  const db = getDb();
-  return db.transaction(async (tx) => {
-    const [row] = await tx
-      .update(listings)
-      .set({ claimed: true, claimedAt: new Date() })
-      .where(and(eq(listings.id, id), eq(listings.claimed, false)))
-      .returning();
-    if (!row) return null;
-    await tx.insert(claims).values({ listingId: id, claimant: "You" });
-    return toListing(row);
   });
 }
 

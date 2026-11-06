@@ -25,14 +25,6 @@ const nav: NavItem[] = [
     ],
   },
   {
-    label: "Marketplace",
-    href: "/marketplace",
-    children: [
-      { label: "Browse grounds", href: "/marketplace", description: "Available batches across campus" },
-      { label: "Listing guidance", href: "/marketplace#guidance", description: "How batches are weighed and stored" },
-    ],
-  },
-  {
     label: "Tools",
     href: "/scan",
     children: [
@@ -44,24 +36,21 @@ const nav: NavItem[] = [
     ],
   },
   {
-    label: "Programme",
-    href: "/#programme",
+    label: "The loop",
+    href: "/#loop",
     children: [
-      { label: "How it works", href: "/#programme", description: "From pantry to purpose" },
-      { label: "Our partners", href: "/#partners", description: "The people keeping the loop turning" },
-      { label: "Latest updates", href: "/#news", description: "Stories from across campus" },
+      { label: "Pantry staff", href: "/#pantry", description: "Scan a pass, pick a pantry and weigh" },
+      { label: "Smart bin OCR and dashboard", href: "/#dashboard", description: "From the scale to the live view" },
+      { label: "Grounds to Glow guide", href: "/#kiosk", description: "Ask the AI guide a question" },
+      { label: "Try the demo", href: "/#try", description: "The whole loop in three minutes" },
     ],
   },
-  { label: "News & events", href: "/#news" },
-  { label: "About", href: "/#about" },
 ];
 
 const infoFor = [
-  { label: "Students and alumni", href: "/marketplace" },
   { label: "Faculty and staff", href: "/dashboard" },
-  { label: "Campus partners", href: "/#partners" },
   { label: "Facilities teams", href: "/cleaner" },
-  { label: "Media and suppliers", href: "/#news" },
+  { label: "Kiosk visitors", href: "/kiosk" },
 ];
 
 export function SiteHeader() {
@@ -344,7 +333,7 @@ export function SiteHeader() {
                 className="w-full border-0 border-b border-white/60 bg-transparent pb-4 font-sans text-[34px] font-extralight leading-tight text-white placeholder:text-white/35 focus:border-white focus:outline-none md:text-[50px]"
               />
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-white/55">
-                <span>Try “marketplace”, “impact” or “kiosk”.</span>
+                <span>Try “dashboard”, “impact” or “kiosk”.</span>
                 <span>Hit enter to search or ESC to close</span>
               </div>
 
