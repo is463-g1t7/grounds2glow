@@ -92,6 +92,8 @@ All demo rows live in `scripts/seed.ts`; there are no entity data arrays in comp
 | --- | --- |
 | `GET /api/bootstrap` | All data needed by the client surfaces |
 | `POST /api/barcode/resolve` | Look up who a scanned staff pass or ID barcode belongs to |
+| `POST /api/ocr/scale` | Read a scale display photo with PaddleOCR on Hugging Face and return the weight |
+| `POST /api/ocr/warm` | Start waking the OCR Space before the weigh step needs it |
 | `POST /api/readings` | Record a floor-scale reading and update the bin |
 | `POST /api/collect` | Empty a bin and write an audit event |
 | `POST /api/sync` | Insert a simulated remote scale reading (demo controls only) |
@@ -125,6 +127,11 @@ curl http://localhost:3000/api/bootstrap
 
 Kiosk chat requires `OPENROUTER_API_KEY` in `.env` (or `.env.local`). Without it, the kiosk's
 deterministic answers still work and the API returns 503.
+
+The cleaner weigh step reads the scale display with the `kevansoon/PaddleOCR` Hugging Face Space
+(set `HF_SPACE_ID` to use another, and `HF_TOKEN` if it's private). The Space sleeps after two
+days without use; the first read after that waits while it starts, and the page retries for up to
+two minutes. The `/scan` and `/ocr` pages still use the simulated OCR in `lib/demo-ocr.ts`.
 
 The Playwright smoke test used during the port lives at
 `../.scratch/smu-reference/prototype-smoke.mjs` and covers DB seed/reset, dashboard simulation,

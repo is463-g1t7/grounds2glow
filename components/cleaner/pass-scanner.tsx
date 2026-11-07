@@ -9,6 +9,7 @@ import {
   CameraOffPlaceholder,
   ScanTips,
 } from "@/components/scanner/barcode-viewfinder";
+import { warmOcr } from "@/lib/client/scale-ocr";
 import { lookupBarcode, useBarcodeScanner } from "@/lib/client/use-barcode-scanner";
 import type { BarcodeMatch, Cleaner } from "@/lib/types";
 import { CleanerShell, StepColumns } from "./cleaner-shell";
@@ -26,7 +27,11 @@ export function PassScanner() {
   const [checking, setChecking] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    // The weigh step reads the scale with OCR on Hugging Face. Start waking it now.
+    warmOcr();
+    return () => window.clearTimeout(timer.current);
+  }, []);
 
   async function checkPass(code: string): Promise<boolean> {
     setMessage(null);

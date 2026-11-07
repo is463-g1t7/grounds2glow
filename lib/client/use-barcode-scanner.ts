@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  CAMERA_CONSTRAINTS,
+  cameraErrorMessage,
+  grabFrame,
+  isMirrored,
+} from "@/lib/client/camera";
 import { apiRequest } from "@/lib/client/use-bootstrap";
 import type { BarcodeMatch } from "@/lib/types";
 
@@ -21,15 +27,6 @@ export const DECODER_ERROR =
 async function createDetector() {
   const { BarcodeDetector } = await import("barcode-detector/ponyfill");
   return new BarcodeDetector({ formats: ["linear_codes"] });
-}
-
-/** Copies the current video frame. It comes from the raw video, so it isn't mirrored like the preview. */
-function grabFrame(video: HTMLVideoElement): HTMLCanvasElement {
-  const frame = document.createElement("canvas");
-  frame.width = video.videoWidth;
-  frame.height = video.videoHeight;
-  frame.getContext("2d")?.drawImage(video, 0, 0);
-  return frame;
 }
 
 /** Enlarges the guide area, which helps when the barcode is small in the frame. */
@@ -71,18 +68,6 @@ export async function lookupBarcode(code: string): Promise<BarcodeMatch | null> 
     body: JSON.stringify({ code }),
   });
   return match;
-}
-
-function cameraErrorMessage(err: unknown): string {
-  const name = err instanceof DOMException ? err.name : "";
-  if (name === "NotAllowedError") {
-    return "Camera permission was blocked. Allow the camera in your browser's address bar, then try again.";
-  }
-  if (name === "NotFoundError") return "No camera was found on this device.";
-  if (name === "NotReadableError") {
-    return "The camera is being used by another app. Close that app, then try again.";
-  }
-  return "The camera couldn't start. Browsers only allow camera access on localhost or HTTPS.";
 }
 
 /**
@@ -167,18 +152,14 @@ export function useBarcodeScanner(onRead: (read: BarcodeRead) => boolean | Promi
     setShowTips(false);
     setStatus("starting");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        // Line barcodes need detail, so ask for the sharpest image the camera offers.
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
+      // Line barcodes need detail, so this asks for the sharpest image the camera offers.
+      const stream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
       if (!mountedRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
       streamRef.current = stream;
-      // A front camera feels natural as a mirror. A phone's rear camera would look backwards.
-      setMirrored(stream.getVideoTracks()[0]?.getSettings().facingMode !== "environment");
+      setMirrored(isMirrored(stream));
       const video = videoRef.current;
       if (!video) return;
       video.srcObject = stream;
