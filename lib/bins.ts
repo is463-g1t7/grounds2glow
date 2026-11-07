@@ -1,6 +1,13 @@
 import type { BinStatus } from "./types";
 
 export const BIN_CAPACITY_KG = 10;
+
+/** Every collection is repurposed by a student volunteer for now; individual names come later. */
+export const COLLECTOR_LABEL = "Student Volunteer";
+
+export function collectorOf(event: { collectedBy?: string | null }): string {
+  return event.collectedBy ?? COLLECTOR_LABEL;
+}
 const NEAR_FULL_RATIO = 0.8;
 
 export function levelsFor(bin: { levels: number }): number {

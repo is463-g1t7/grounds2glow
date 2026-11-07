@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 import { pathToFileURL } from "node:url";
 import * as schema from "../db/schema";
+import { COLLECTOR_LABEL } from "../lib/bins";
 import type { BinEvent, Cleaner } from "../lib/types";
 
 /**
@@ -30,72 +31,155 @@ const cleaners: Cleaner[] = [
   { id: "c-0451", name: "Ahmad Faizal", initials: "AF", pass: "SMU-CLN-0451", shift: "PM", vendor: "Campus FM · Zone C" },
 ];
 
-function buildEvents(): BinEvent[] {
+/** How each building's pantries behave: fill rate, which levels drink the most, who empties them. */
+const profiles: Record<string, { kgPerDay: number; levelWeights: number[]; am: string; pm: string }> = {
+  "bin-soa": { kgPerDay: 1.2, levelWeights: [1, 3, 1.5, 2, 0.5], am: "c-0142", pm: "c-0388" },
+  "bin-lkcsb": { kgPerDay: 1.6, levelWeights: [1, 3.5, 2, 1], am: "c-0142", pm: "c-0388" },
+  "bin-soe": { kgPerDay: 1.8, levelWeights: [1, 1.5, 4, 1.5], am: "c-0217", pm: "c-0451" },
+  "bin-scis": { kgPerDay: 0.8, levelWeights: [0.5, 2, 3, 1, 1], am: "c-0217", pm: "c-0451" },
+  // L6 is a quiet pantry on purpose, so the level chart has a gap to show.
+  "bin-yphsl": { kgPerDay: 1.0, levelWeights: [1, 1, 1.5, 0.5, 3, 0], am: "c-0217", pm: "c-0388" },
+  "bin-soss": { kgPerDay: 1.1, levelWeights: [3, 1, 1, 0.5], am: "c-0142", pm: "c-0451" },
+  "bin-lib": { kgPerDay: 0.9, levelWeights: [1, 1.5, 1, 3, 0.5], am: "c-0217", pm: "c-0388" },
+};
+
+const HISTORY_DAYS = 30;
+const OPEN_HOUR = 8;
+const CLOSE_HOUR = 20;
+const WORK_HOURS_PER_DAY = CLOSE_HOUR - OPEN_HOUR;
+const AVG_CADDY_KG = 0.65;
+
+/** Small deterministic PRNG so every reset produces the same history. */
+function mulberry32(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const hashOf = (s: string) => [...s].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) | 0, 7);
+
+/** The moment `hours` working hours (08:00–20:00) before `now`, skipping nights. */
+function workingHoursBefore(now: number, hours: number): number {
+  const d = new Date(now);
+  let cursor = now;
+  if (d.getHours() >= CLOSE_HOUR) cursor = d.setHours(CLOSE_HOUR, 0, 0, 0);
+  else if (d.getHours() < OPEN_HOUR) {
+    d.setDate(d.getDate() - 1);
+    cursor = d.setHours(CLOSE_HOUR, 0, 0, 0);
+  }
+  let remaining = hours;
+  for (;;) {
+    const open = new Date(cursor);
+    open.setHours(OPEN_HOUR, 0, 0, 0);
+    const available = (cursor - open.getTime()) / HOUR;
+    if (remaining <= available) return cursor - remaining * HOUR;
+    remaining -= available;
+    open.setDate(open.getDate() - 1);
+    cursor = open.setHours(CLOSE_HOUR, 0, 0, 0);
+  }
+}
+
+/** Splits `total` kg into caddy-sized drops that add up exactly. */
+function splitKg(total: number, rand: () => number): number[] {
+  const n = Math.max(1, Math.round(total / AVG_CADDY_KG));
+  const weights = Array.from({ length: n }, () => 0.5 + rand());
+  const sum = weights.reduce((s, w) => s + w, 0);
+  const parts = weights.map((w) => round2((total * w) / sum));
+  parts[n - 1] = round2(total - parts.slice(0, -1).reduce((s, p) => s + p, 0));
+  return parts;
+}
+
+function pickLevel(weights: number[], rand: () => number): number {
+  const total = weights.reduce((s, w) => s + w, 0);
+  let r = rand() * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r < 0) return i + 1;
+  }
+  return weights.length;
+}
+
+/**
+ * About 30 days of pantry drops and collections per building. Each bin's history
+ * starts at zero and ends at its seeded weight, and every collection empties
+ * exactly what the preceding deposits put in.
+ */
+export function buildEvents(): BinEvent[] {
   const now = Date.now();
-  const hoursAgo = (h: number) => new Date(now - h * HOUR).toISOString();
+  const events: BinEvent[] = [];
 
-  function dep(
-    id: string,
-    hours: number,
-    binId: string,
-    short: string,
-    level: number,
-    cleanerId: string,
-    beforeKg: number,
-    afterKg: number,
-    source: BinEvent["source"] = "ocr"
-  ): BinEvent {
-    return {
-      id,
-      at: hoursAgo(hours),
-      binId,
-      level,
-      pantry: `${short} · L${level}`,
-      type: "deposit",
-      kg: round2(afterKg - beforeKg),
-      cleanerId,
-      source,
-      beforeKg,
-      afterKg,
-    };
+  for (const bin of bins) {
+    const profile = profiles[bin.id];
+    const rand = mulberry32(hashOf(bin.id));
+    const rate = profile.kgPerDay / WORK_HOURS_PER_DAY; // kg per working hour
+    const limit = HISTORY_DAYS * WORK_HOURS_PER_DAY;
+
+    // Fills are found walking back from now, in working hours before now.
+    type Fill = { total: number; startH: number; endH: number; collectH: number | null };
+    const fills: Fill[] = [];
+    const lastDropH = 0.15 + rand() * 0.3;
+    let startH = lastDropH + bin.weightKg / rate;
+    fills.push({ total: bin.weightKg, startH, endH: lastDropH, collectH: null });
+    for (;;) {
+      const collectH = startH + 0.1 + rand() * 0.4;
+      const endH = collectH + 1 + rand() * 4; // the bin sits full for a few hours
+      const total = round2(Math.min(bin.capacityKg, bin.capacityKg * (0.85 + rand() * 0.2)));
+      const fillStartH = endH + total / rate;
+      if (fillStartH > limit) break;
+      fills.push({ total, startH: fillStartH, endH, collectH });
+      startH = fillStartH;
+    }
+    fills.reverse();
+
+    let weight = 0;
+    let seq = 0;
+    const id = () => `seed-${bin.short.toLowerCase()}-${++seq}`;
+    for (const fill of fills) {
+      const drops = fill.total > 0 ? splitKg(fill.total, rand) : [];
+      const span = fill.startH - fill.endH;
+      drops.forEach((kg, i) => {
+        const slot = drops.length > 1 ? span / (drops.length - 1) : 0;
+        const h = drops.length > 1 ? fill.startH - i * slot + (rand() - 0.5) * slot * 0.6 : fill.endH;
+        const at = workingHoursBefore(now, Math.min(fill.startH, Math.max(fill.endH, h)));
+        const level = pickLevel(profile.levelWeights, rand);
+        const r = rand();
+        const before = weight;
+        weight = round2(weight + kg);
+        events.push({
+          id: id(),
+          at: new Date(at).toISOString(),
+          binId: bin.id,
+          level,
+          pantry: `${bin.short} · L${level}`,
+          type: "deposit",
+          kg,
+          cleanerId: new Date(at).getHours() < 14 ? profile.am : profile.pm,
+          source: r < 0.8 ? "ocr" : r < 0.92 ? "reference" : "manual",
+          beforeKg: before,
+          afterKg: weight,
+        });
+      });
+      if (fill.collectH != null) {
+        events.push({
+          id: id(),
+          at: new Date(workingHoursBefore(now, fill.collectH)).toISOString(),
+          binId: bin.id,
+          type: "collect",
+          kg: weight,
+          cleanerId: null,
+          collectedBy: COLLECTOR_LABEL,
+          beforeKg: weight,
+          afterKg: 0,
+        });
+        weight = 0;
+      }
+    }
   }
 
-  function collect(
-    id: string,
-    hours: number,
-    binId: string,
-    kg: number,
-    cleanerId: string
-  ): BinEvent {
-    return {
-      id,
-      at: hoursAgo(hours),
-      binId,
-      type: "collect",
-      kg,
-      cleanerId,
-      beforeKg: kg,
-      afterKg: 0,
-    };
-  }
-
-  // Each bin's history starts at zero and ends at its seeded weight, and every
-  // collection empties exactly what the preceding deposits put in.
-  return [
-    dep("seed-1", 8.0, "bin-soa", "SOA", 2, "c-0388", 0, 2.3),
-    collect("seed-2", 7.5, "bin-soa", 2.3, "c-0388"),
-    dep("seed-3", 1.1, "bin-soa", "SOA", 4, "c-0388", 0, 3.1, "manual"),
-    dep("seed-4", 6.0, "bin-lkcsb", "LKCSB", 2, "c-0142", 0, 7.0),
-    collect("seed-5", 5.5, "bin-lkcsb", 7.0, "c-0142"),
-    dep("seed-6", 0.9, "bin-lkcsb", "LKCSB", 2, "c-0142", 0, 8.6),
-    dep("seed-7", 0.7, "bin-soe", "SOE", 3, "c-0217", 0, 10.0),
-    dep("seed-8", 5.0, "bin-scis", "SCIS", 2, "c-0451", 0, 0.7),
-    collect("seed-9", 4.5, "bin-scis", 0.7, "c-0451"),
-    dep("seed-10", 0.4, "bin-scis", "SCIS", 3, "c-0217", 0, 1.2),
-    dep("seed-11", 0.3, "bin-yphsl", "YPHSL", 5, "c-0388", 0, 3.6),
-    dep("seed-12", 0.2, "bin-soss", "SOSS", 1, "c-0451", 0, 6.4),
-    dep("seed-13", 0.1, "bin-lib", "LKS", 4, "c-0142", 0, 2.2),
-  ];
+  return events.sort((a, b) => (a.at < b.at ? -1 : 1));
 }
 
 const news = [
@@ -158,6 +242,7 @@ export async function seedDatabase(db: Database): Promise<void> {
         type: e.type,
         kg: String(e.kg),
         cleanerId: e.cleanerId ?? null,
+        collectedBy: e.collectedBy ?? null,
         source: e.source ?? null,
         beforeKg: e.beforeKg == null ? null : String(e.beforeKg),
         afterKg: e.afterKg == null ? null : String(e.afterKg),

@@ -1,6 +1,7 @@
 import "server-only";
 import { asc, desc, eq } from "drizzle-orm";
 import { getDb } from "./db";
+import { COLLECTOR_LABEL } from "./bins";
 import {
   binEvents,
   bins,
@@ -35,6 +36,7 @@ function toEvent(r: EventRow): BinEvent {
     type: r.type as BinEvent["type"],
     kg: num(r.kg),
     cleanerId: r.cleanerId,
+    collectedBy: r.collectedBy,
     source: r.source as EventSource | null,
     beforeKg: r.beforeKg == null ? null : num(r.beforeKg),
     afterKg: r.afterKg == null ? null : num(r.afterKg),
@@ -225,7 +227,9 @@ export async function collectBin(
         binId,
         type: "collect",
         kg: String(kg),
+        // A cleaner who swaps the bin is kept on the record; the grounds go to the volunteer.
         cleanerId: cleanerId ?? null,
+        collectedBy: COLLECTOR_LABEL,
         beforeKg: String(kg),
         afterKg: "0",
       })

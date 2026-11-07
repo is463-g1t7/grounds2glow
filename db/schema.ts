@@ -58,6 +58,7 @@ export const binEvents = pgTable(
     type: text("type").notNull(),
     kg: numeric("kg", { precision: 6, scale: 2 }).notNull(),
     cleanerId: text("cleaner_id").references(() => cleaners.id, { onDelete: "set null" }),
+    collectedBy: text("collected_by"),
     source: text("source"),
     beforeKg: numeric("before_kg", { precision: 6, scale: 2 }),
     afterKg: numeric("after_kg", { precision: 6, scale: 2 }),

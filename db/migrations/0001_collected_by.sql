@@ -1,0 +1,1 @@
+ALTER TABLE "bin_events" ADD COLUMN "collected_by" text;

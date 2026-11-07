@@ -31,6 +31,8 @@ export type BinEvent = {
   type: "deposit" | "collect";
   kg: number;
   cleanerId?: string | null;
+  /** Who took a collected bin away to be repurposed. Only set on collect events. */
+  collectedBy?: string | null;
   source?: EventSource | null;
   beforeKg?: number | null;
   afterKg?: number | null;

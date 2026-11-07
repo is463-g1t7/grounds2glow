@@ -31,6 +31,33 @@
   --shadow-lift: 0 10px 24px -14px rgb(20 27 77 / 0.3);
 }
 
+/* Surface and chart tokens used by components/ui/chart-card.tsx, mapped onto the SMU palette.
+   Chart slots follow the series, never its rank: gold, navy, blue, light gold, navy-soft. */
+:root {
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --muted-foreground: #555555;
+  --border: #dcd5c9;
+  --accent: #f3eee7;
+  --chart-1: #8a704c;
+  --chart-2: #141b4d;
+  --chart-3: #3860be;
+  --chart-4: #b49a76;
+  --chart-5: #232c6b;
+}
+
+@theme inline {
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

@@ -8,6 +8,13 @@
       "when": 1793689347975,
       "tag": "0000_early_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794044654286,
+      "tag": "0001_collected_by",
+      "breakpoints": true
     }
   ]
 }
