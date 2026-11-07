@@ -31,7 +31,7 @@ const nav: NavItem[] = [
       { label: "Scale scanner", href: "/scan", description: "Read the scale LCD and post a weight" },
       { label: "OCR reader", href: "/ocr", description: "Extract text from an image" },
       { label: "Cleaner app", href: "/cleaner", description: "Scan a pass, pick a pantry and weigh" },
-      { label: "Printable passes", href: "/passes", description: "Demo staff QR cards" },
+      { label: "Printable passes", href: "/passes", description: "Demo staff barcode cards" },
       { label: "Grounds to Glow kiosk", href: "/kiosk", description: "Coffee scrub dispensing experience" },
     ],
   },

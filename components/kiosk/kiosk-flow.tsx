@@ -7,17 +7,19 @@ import QRCode from "qrcode";
 import {
   ArrowLeft,
   ArrowRight,
+  Barcode,
   Check,
   CheckCircle2,
   Coffee,
   Droplets,
   Leaf,
-  QrCode,
   ScanLine,
   Sparkles,
   X,
 } from "lucide-react";
 import { KioskChat } from "@/components/kiosk/kiosk-chat";
+import { BarcodeViewfinder, ScanTips } from "@/components/scanner/barcode-viewfinder";
+import { lookupBarcode, useBarcodeScanner } from "@/lib/client/use-barcode-scanner";
 
 const steps = [
   {
@@ -220,15 +222,18 @@ function CheckIn({
   onName: (value: string) => void;
   onNext: () => void;
 }) {
-  const [scanning, setScanning] = useState(false);
-
-  const scanStudentId = () => {
-    setScanning(true);
-    window.setTimeout(() => {
-      onName("Julie Smith");
-      setScanning(false);
-    }, 1200);
-  };
+  const [scanResult, setScanResult] = useState<"matched" | "no-name" | "failed" | null>(null);
+  const scanner = useBarcodeScanner(async (read) => {
+    try {
+      const match = await lookupBarcode(read.value);
+      if (match) onName(match.name);
+      setScanResult(match ? "matched" : "no-name");
+      return true;
+    } catch {
+      setScanResult("failed");
+      return false;
+    }
+  });
 
   return (
     <main className="grid flex-1 place-items-center px-5 pb-12">
@@ -268,7 +273,10 @@ function CheckIn({
               autoFocus
               id="kiosk-name"
               value={name}
-              onChange={(event) => onName(event.target.value)}
+              onChange={(event) => {
+                onName(event.target.value);
+                setScanResult(null);
+              }}
               onKeyDown={(event) => event.key === "Enter" && name.trim() && onNext()}
               placeholder="Enter your first name"
               className="mt-2 h-14 w-full rounded border border-black/15 bg-white px-4 text-[17px] text-black outline-none transition placeholder:text-black/25 focus:border-smu-gold"
@@ -276,29 +284,66 @@ function CheckIn({
             <div className="my-5 flex items-center gap-4 text-[10px] font-bold uppercase tracking-[1.5px] text-black/30">
               <span className="h-px flex-1 bg-black/10" /> or <span className="h-px flex-1 bg-black/10" />
             </div>
-            <button
-              type="button"
-              disabled={scanning}
-              onClick={scanStudentId}
-              className={`flex h-14 w-full items-center justify-center gap-3 rounded border-2 border-dashed transition ${
-                scanning
-                  ? "border-smu-gold bg-smu-gold/5 text-smu-gold-dark"
-                  : "border-black/15 text-smu-muted hover:border-smu-gold hover:bg-smu-cream/40"
-              }`}
-            >
-              {scanning ? <ScanLine className="h-5 w-5 animate-pulse" /> : <QrCode className="h-5 w-5" />}
-              <span className="font-semibold">
-                {scanning ? "Scanning student ID…" : "Scan SMU ID barcode"}
-              </span>
-            </button>
-            {name === "Julie Smith" && !scanning && (
-              <div className="mt-3 flex items-center justify-center gap-2 text-[13px] font-semibold text-[#287a28]">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-smu-success/10">
-                  <Check className="h-3.5 w-3.5" />
-                </span>
-                SMU ID scanned successfully
-              </div>
+            {scanner.status === "idle" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setScanResult(null);
+                  void scanner.start();
+                }}
+                className="flex h-14 w-full items-center justify-center gap-3 rounded border-2 border-dashed border-black/15 text-smu-muted transition hover:border-smu-gold hover:bg-smu-cream/40"
+              >
+                <Barcode className="h-5 w-5" />
+                <span className="font-semibold">Scan SMU ID barcode</span>
+              </button>
             )}
+            {/* Stays mounted while idle so the camera has a video element to attach to as it starts. */}
+            <div className={scanner.status === "idle" ? "hidden" : "overflow-hidden rounded border border-black/10"}>
+              <BarcodeViewfinder
+                videoRef={scanner.videoRef}
+                status={scanner.status}
+                mirrored={scanner.mirrored}
+                showScanLine={!scanner.error}
+              />
+              <div className="flex items-center justify-between gap-3 p-3">
+                <p className="text-[13px] text-smu-muted">
+                  {scanner.status === "starting"
+                    ? "Starting camera…"
+                    : "Hold your ID barcode inside the box."}
+                </p>
+                <button type="button" onClick={scanner.stop} className="btn-smu btn-smu-outline btn-smu-sm">
+                  Cancel
+                </button>
+              </div>
+            </div>
+            <div aria-live="polite">
+              {scanResult === "matched" && (
+                <div className="mt-3 flex items-center justify-center gap-2 text-[13px] font-semibold text-[#287a28]">
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-smu-success/10">
+                    <Check className="h-3.5 w-3.5" />
+                  </span>
+                  SMU ID scanned successfully
+                </div>
+              )}
+              {scanResult === "no-name" && (
+                <p className="mt-3 text-center text-[13px] text-smu-muted">
+                  We read your ID, but don&apos;t have a name for it. Please type your first name.
+                </p>
+              )}
+              {scanResult === "failed" && (
+                <p className="mt-3 text-center text-[13px] text-smu-danger">
+                  Couldn&apos;t check your ID. Cancel and try again, or type your first name.
+                </p>
+              )}
+              {scanner.error && (
+                <p className="mt-3 text-center text-[13px] text-smu-danger">{scanner.error}</p>
+              )}
+              {scanner.status === "scanning" && scanner.showTips && !scanner.error && (
+                <div className="mt-3 text-[13px] leading-6 text-smu-muted">
+                  <ScanTips />
+                </div>
+              )}
+            </div>
             <button
               type="button"
               disabled={!name.trim()}

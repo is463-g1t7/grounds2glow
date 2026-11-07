@@ -11,6 +11,7 @@ import {
   programmeMetrics,
 } from "@/db/schema";
 import type {
+  BarcodeMatch,
   Bin,
   BinEvent,
   BootstrapData,
@@ -77,6 +78,22 @@ export async function getCleaners(): Promise<Cleaner[]> {
     shift: r.shift as Cleaner["shift"],
     vendor: r.vendor,
   }));
+}
+
+/** A real card accepted as a staff pass. It signs in as a demo cleaner, so its number stays out of the audit trail. */
+const CARD_PASS = "01464346";
+const CARD_CLEANER_ID = "c-0142";
+
+/** Finds who a scanned barcode belongs to: a demo staff pass or the real card above. */
+export async function resolveBarcode(code: string): Promise<BarcodeMatch | null> {
+  const value = code.trim().toUpperCase();
+  if (!value) return null;
+  const db = getDb();
+  const [cleaner] = await db
+    .select({ id: cleaners.id, name: cleaners.name, pass: cleaners.pass })
+    .from(cleaners)
+    .where(value === CARD_PASS ? eq(cleaners.id, CARD_CLEANER_ID) : eq(cleaners.pass, value));
+  return cleaner ? { cleaner, name: cleaner.name } : null;
 }
 
 export async function getNews(): Promise<NewsItem[]> {

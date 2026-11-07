@@ -91,6 +91,7 @@ All demo rows live in `scripts/seed.ts`; there are no entity data arrays in comp
 | Route | Purpose |
 | --- | --- |
 | `GET /api/bootstrap` | All data needed by the client surfaces |
+| `POST /api/barcode/resolve` | Look up who a scanned staff pass or ID barcode belongs to |
 | `POST /api/readings` | Record a floor-scale reading and update the bin |
 | `POST /api/collect` | Empty a bin and write an audit event |
 | `POST /api/sync` | Insert a simulated remote scale reading (demo controls only) |

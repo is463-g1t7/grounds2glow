@@ -12,7 +12,7 @@ export default function PassesPage() {
     <>
       <PageHeader
         title="Demo staff passes"
-        lead="Each QR encodes the pass number. Open the pass scanner on a phone and point it here, or tap a pass in the cleaner app."
+        lead="Each barcode encodes the pass number. Open the cleaner app on a phone and point it here, or type a pass number in the app."
         crumbs={[{ label: "Home", href: "/" }, { label: "Cleaner" }, { label: "Staff passes" }]}
         actions={
           <>
@@ -39,7 +39,7 @@ export default function PassesPage() {
             ))}
           </div>
           <p className="mt-6 text-center text-[12px] text-smu-muted">
-            Print on A4 and cut along the card edges. The scanner reads the QR; demo taps work without a camera.
+            Print on A4 and cut along the card edges. The app reads the barcode, or you can type the number if a camera isn&apos;t available.
           </p>
         </div>
       </section>

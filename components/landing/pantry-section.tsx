@@ -7,7 +7,7 @@ import { StageMark } from "./shared";
 const PASS = "SMU-CLN-0142";
 
 const steps = [
-  ["Scan a staff pass", "The phone camera reads the QR code on the pass, so the drop-off is signed from the start."],
+  ["Scan a staff pass", "The camera reads the barcode on the pass, so the drop-off is signed from the start."],
   ["Pick the pantry", "Choose the building on the campus map, then the level the grounds came from."],
   ["Weigh the bin", "OCR reads the scale display and saves the weight, with nothing to type."],
 ];
@@ -60,8 +60,8 @@ export function PantrySection({ cleaners }: { cleaners: Cleaner[] }) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`/passes/${PASS}.svg`}
-              alt={`QR code on staff pass ${PASS}`}
-              className="aspect-square w-full"
+              alt={`Barcode on staff pass ${PASS}`}
+              className="block h-auto w-full"
               loading="lazy"
             />
             <figcaption className="mt-3 border-t border-black/10 pt-3">

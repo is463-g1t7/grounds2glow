@@ -8,7 +8,7 @@ import { latestDeposit, LiveDot } from "./shared";
 
 const steps = [
   ["Keep this page open", "It checks for new readings every few seconds."],
-  ["Open the pantry staff app on your phone", "Scan the code or use the button, then tap a staff pass, pick a pantry and weigh the bin."],
+  ["Open the pantry staff app on your phone", "Scan the code or use the button, then scan a demo staff pass or type its number, pick a pantry and weigh the bin."],
   ["Watch your reading land here", "The “Waiting for your reading” panel changes as soon as it arrives."],
   ["Ask the kiosk guide a question", "Finish the loop with the AI guide further up this page."],
 ];

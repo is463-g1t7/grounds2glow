@@ -20,6 +20,12 @@ export type Cleaner = {
   vendor: string;
 };
 
+/** Who a scanned barcode belongs to. */
+export type BarcodeMatch = {
+  cleaner: Pick<Cleaner, "id" | "name" | "pass">;
+  name: string;
+};
+
 export type EventSource = "ocr" | "reference" | "manual" | "demo";
 
 export type BinEvent = {
