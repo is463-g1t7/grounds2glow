@@ -39,7 +39,6 @@ type Phase =
   | "locked"
   | "captured"
   | "ocr"
-  | "review"
   | "manual"
   | "saving"
   | "saved"
@@ -225,7 +224,7 @@ function WeighStationVisit() {
     setPhase("choose");
   }
 
-  async function save(afterKg: number, from: EventSource) {
+  async function save(afterKg: number, from: EventSource, photo = shot?.photo ?? null) {
     if (!bin || !cleaner) return;
     setPhase("saving");
     setError(null);
@@ -241,7 +240,7 @@ function WeighStationVisit() {
           afterKg,
           source: from,
           cleanerId: cleaner.id,
-          photo: shot?.photo ?? null,
+          photo,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { event?: BinEvent; error?: string };
@@ -265,7 +264,7 @@ function WeighStationVisit() {
     }
   }
 
-  /** Sends the photo to OCR, retrying while the service wakes up, then asks the cleaner to check it. */
+  /** Sends the photo to OCR, retrying while the service wakes up, then logs the weight it read. */
   async function readShot(
     next: Shot,
     image: HTMLImageElement | HTMLCanvasElement,
@@ -304,7 +303,11 @@ function WeighStationVisit() {
         unit: reading.unit,
         guessed: reading.unitFrom === "guess",
       });
-      setPhase(reading.kg > startKg ? "review" : "rejected");
+      if (reading.kg <= startKg) {
+        setPhase("rejected");
+        return;
+      }
+      await save(reading.kg, "ocr", next.photo);
     } catch (err) {
       if (!live()) return;
       setWaking(false);
@@ -485,8 +488,8 @@ function WeighStationVisit() {
         <PanelTitle>Photograph the scale display</PanelTitle>
         {justSwapped && <SwapReminder />}
         <p className="cleaner-body">
-          Put the bin on the scale, then send a photo of the display. You&apos;ll check the number
-          before it&apos;s saved.
+          Put the bin on the scale, then send a photo of the display. The weight is logged
+          automatically.
         </p>
         <div className="flex flex-col gap-3">
           <button
@@ -526,44 +529,6 @@ function WeighStationVisit() {
             Cancel
           </button>
         </div>
-      </>
-    );
-  } else if (phase === "review" && readKg != null && shown) {
-    panel = (
-      <>
-        <PanelTitle>Is this what the scale shows?</PanelTitle>
-        <div className="fade-up">
-          <p className="font-display text-[84px] leading-[84px] tabular-nums text-smu-navy">
-            {shown.unit === "g"
-              ? shown.value.toLocaleString("en", { maximumFractionDigits: 1 })
-              : Number(shown.value.toFixed(3))}
-            <span className="ml-2 text-[36px] text-black/60">{shown.unit}</span>
-          </p>
-          {shown.unit === "g" && (
-            <p className="mt-2 text-[16px] text-black/70">Saved as {kgText(readKg)}</p>
-          )}
-          {shown.guessed && (
-            <p className="mt-3 rounded border border-smu-warning/40 bg-smu-warning/10 px-3 py-2 text-[15px] leading-6 text-black/80">
-              The unit wasn&apos;t clear, so this was read as{" "}
-              {shown.unit === "g" ? "grams" : "kilograms"}. Check it matches the display.
-            </p>
-          )}
-        </div>
-        <Sum before={before} after={readKg} level={level} />
-        <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            autoFocus
-            onClick={() => void save(readKg, "ocr")}
-            className="btn-smu btn-smu-gold cleaner-action"
-          >
-            <CheckCircle2 className="h-5 w-5" /> Yes, save {shownText(shown.value, shown.unit)}
-          </button>
-          <button type="button" onClick={retake} className="btn-smu btn-smu-outline cleaner-action">
-            <RefreshCw className="h-5 w-5" /> No, retake the photo
-          </button>
-        </div>
-        {typeButton}
       </>
     );
   } else if (phase === "manual") {
@@ -631,7 +596,7 @@ function WeighStationVisit() {
           </button>
           <button
             type="button"
-            onClick={shot && readKg != null ? () => setPhase("review") : backToStart}
+            onClick={backToStart}
             className="btn-smu btn-smu-outline cleaner-action"
           >
             Back to the photo
@@ -806,7 +771,7 @@ function WeighStationVisit() {
   const showPhoto = shot != null && phase !== "choose" && phase !== "no-sample";
   const typedByHand = phase === "manual" || pending?.from === "manual";
   const inset =
-    showPhoto && shot?.crop && size && (phase === "ocr" || phase === "review" || phase === "saved")
+    showPhoto && shot?.crop && size && (phase === "ocr" || phase === "saved")
       ? shot.crop
       : null;
 
@@ -922,7 +887,6 @@ function WeighStationVisit() {
         : null,
       readKg != null,
     ],
-    ["Confirmed", phase === "saved" ? "by cleaner" : null, phase === "saved"],
     ["Dashboard", phase === "saved" ? "updated" : null, phase === "saved"],
   ];
 
