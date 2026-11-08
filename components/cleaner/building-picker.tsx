@@ -10,6 +10,7 @@ import { weight } from "@/lib/format";
 import { setStation, useDemoMode, useStation } from "@/lib/client/station";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import { useNow } from "@/lib/client/use-now";
+import { useVisitKey } from "@/lib/client/use-visit-key";
 import type { Bin, BinEvent, BinStatus, Cleaner } from "@/lib/types";
 import { CleanerShell, LoadingPanel, NeedsPass } from "./cleaner-shell";
 
@@ -28,6 +29,10 @@ const STATUS_DOT: Record<BinStatus, string> = {
 };
 
 export function BuildingPicker() {
+  return <BuildingPickerVisit key={useVisitKey()} />;
+}
+
+function BuildingPickerVisit() {
   const params = useSearchParams();
   const { data, loading, refresh } = useBootstrap();
   const station = useStation();

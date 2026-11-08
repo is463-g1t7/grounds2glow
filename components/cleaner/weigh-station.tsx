@@ -26,6 +26,7 @@ import {
 } from "@/lib/client/scale-ocr";
 import { useDemoMode, useScaleUnit } from "@/lib/client/station";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
+import { useVisitKey } from "@/lib/client/use-visit-key";
 import type { OcrLine } from "@/lib/languages";
 import { toKg, type ScaleUnit } from "@/lib/scale-reading";
 import { pickFrame } from "@/lib/scales";
@@ -99,6 +100,10 @@ function parseTyped(text: string, unit: ScaleUnit): number | null {
 }
 
 export function WeighStation() {
+  return <WeighStationVisit key={useVisitKey()} />;
+}
+
+function WeighStationVisit() {
   const params = useSearchParams();
   const demo = useDemoMode();
   const scaleUnit = useScaleUnit();

@@ -8,6 +8,7 @@ import { BarcodeViewfinder, ScanTips } from "@/components/scanner/barcode-viewfi
 import { warmOcr } from "@/lib/client/scale-ocr";
 import { useDemoMode, useStation } from "@/lib/client/station";
 import { useBootstrap } from "@/lib/client/use-bootstrap";
+import { useVisitKey } from "@/lib/client/use-visit-key";
 import { lookupBarcode, useBarcodeScanner } from "@/lib/client/use-barcode-scanner";
 import type { BarcodeMatch, Cleaner } from "@/lib/types";
 import { CleanerShell, Panel } from "./cleaner-shell";
@@ -18,6 +19,10 @@ export function passBarcodeSrc(c: Pick<Cleaner, "pass">): string {
 }
 
 export function PassScanner() {
+  return <PassScannerVisit key={useVisitKey()} />;
+}
+
+function PassScannerVisit() {
   const router = useRouter();
   const demo = useDemoMode();
   const station = useStation();
