@@ -1,6 +1,9 @@
+/** Part of a photo, as fractions of its width and height. */
+export type LcdRect = { x: number; y: number; w: number; h: number };
+
 /**
- * Preloaded overhead frames of the central-bin floor scale. `refKg` is what the LCD shows —
- * used to pick a frame heavier than the bin's current total, and as a labelled fallback.
+ * Overhead illustrations of a floor scale for the landing page. `refKg` is what the LCD shows.
+ * They show a full-size bin, so they aren't used as photos to weigh.
  */
 export const SCALE_FRAMES = [
   { src: "/images/weighing_scale_1.jpeg", refKg: 4.2 },
@@ -10,12 +13,24 @@ export const SCALE_FRAMES = [
 
 export type ScaleFrame = (typeof SCALE_FRAMES)[number];
 
-/** LCD window within the overhead frames (fractions of width/height). */
-export const SCALE_LCD = { x: 0.425, y: 0.12, w: 0.15, h: 0.12 };
+/** LCD window within the landing page's illustrations (fractions of width/height). */
+export const SCALE_LCD: LcdRect = { x: 0.425, y: 0.12, w: 0.15, h: 0.12 };
 
-/** Random frame whose reading is above the bin's current total; null if none is. */
-export function pickFrame(currentKg: number, exclude?: string): ScaleFrame | null {
-  const ok = SCALE_FRAMES.filter((f) => f.refKg > currentKg + 0.05 && f.src !== exclude);
-  const pool = ok.length ? ok : SCALE_FRAMES.filter((f) => f.refKg > currentKg + 0.05);
-  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+/**
+ * Sample photos of the prototype's real scale, for the weigh step. `refKg` is what the LCD shows
+ * (the labelled fallback if OCR can't read it) and `lcd` is where the display is in the photo.
+ * Add more photos at heavier readings so bins that already hold grounds have one to use.
+ */
+export const SAMPLE_FRAMES: Array<{ src: string; refKg: number; lcd: LcdRect }> = [
+  { src: "/images/scale.jpg", refKg: 0.129, lcd: { x: 0.404, y: 0.537, w: 0.19, h: 0.065 } },
+];
+
+export type SampleFrame = (typeof SAMPLE_FRAMES)[number];
+
+/** Random sample photo whose reading is above the bin's current total; null if none is. */
+export function pickFrame(currentKg: number, exclude?: string): SampleFrame | null {
+  const heavier = SAMPLE_FRAMES.filter((f) => f.refKg > currentKg);
+  const pool = heavier.filter((f) => f.src !== exclude);
+  const from = pool.length ? pool : heavier;
+  return from.length ? from[Math.floor(Math.random() * from.length)] : null;
 }

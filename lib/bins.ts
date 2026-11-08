@@ -1,6 +1,6 @@
 import type { BinStatus } from "./types";
 
-export const BIN_CAPACITY_KG = 10;
+export const BIN_CAPACITY_KG = 2;
 
 /** Every collection is repurposed by a student volunteer for now; individual names come later. */
 export const COLLECTOR_LABEL = "Student Volunteer";

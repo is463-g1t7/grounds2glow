@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { BuildingPicker } from "@/components/cleaner/building-picker";
 
-export const metadata = { title: "Pick pantry" };
+export const metadata = { title: "Choose pantry" };
 
 export default function BuildingPage() {
   return (

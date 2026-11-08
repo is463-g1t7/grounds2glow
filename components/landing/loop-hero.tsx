@@ -1,3 +1,4 @@
+import { weight } from "@/lib/format";
 import { ArrowDown } from "lucide-react";
 import Link from "next/link";
 import { ago } from "@/lib/analytics";
@@ -35,7 +36,7 @@ export function LoopHero({
       stage: 2 as const,
       title: "Smart bin OCR and dashboard",
       text: "OCR reads the scale and the dashboard updates in seconds.",
-      live: hasData ? `${total.toFixed(1)} kg in the bins right now` : null,
+      live: hasData ? `${weight(total)} in the bins right now` : null,
       href: "#dashboard",
     },
     {
@@ -122,7 +123,7 @@ export function LoopHero({
                 <LiveDot />
                 <span>
                   Latest reading:{" "}
-                  <span className="font-semibold tabular-nums text-white">+{latest.kg.toFixed(2)} kg</span>
+                  <span className="font-semibold tabular-nums text-white">+{weight(latest.kg)}</span>
                   {latest.pantry ? ` from ${latest.pantry}` : ""}, {ago(latest.at, now)}
                 </span>
               </>

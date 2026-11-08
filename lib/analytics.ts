@@ -29,14 +29,14 @@ const inWindow = (e: BinEvent, w: Window) => {
   return t >= w.from && t < w.to;
 };
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+const roundG = (n: number) => Math.round(n * 1000) / 1000;
 
 export function eventsIn(events: BinEvent[], w: Window, type?: BinEvent["type"]): BinEvent[] {
   return events.filter((e) => (!type || e.type === type) && inWindow(e, w));
 }
 
 export function sumKg(events: BinEvent[], w: Window, type: BinEvent["type"]): number {
-  return round2(eventsIn(events, w, type).reduce((s, e) => s + e.kg, 0));
+  return roundG(eventsIn(events, w, type).reduce((s, e) => s + e.kg, 0));
 }
 
 /** Change vs the previous period as a fraction, or undefined when there is nothing to compare. */
@@ -95,7 +95,7 @@ export function kgByBuilding(
   for (const e of eventsIn(events, w, type)) {
     const row = rows.get(e.binId);
     if (!row) continue;
-    row.kg = round2(row.kg + e.kg);
+    row.kg = roundG(row.kg + e.kg);
     row.count += 1;
   }
   return [...rows.values()].sort((a, b) => b.kg - a.kg);
@@ -119,7 +119,7 @@ export function pantriesByKg(
       kg: 0,
       count: 0,
     };
-    cur.kg = round2(cur.kg + e.kg);
+    cur.kg = roundG(cur.kg + e.kg);
     cur.count += 1;
     sums.set(key, cur);
   }
@@ -135,7 +135,7 @@ export function levelBreakdown(
   const rows = Array.from({ length: levels }, (_, i) => ({ level: `L${i + 1}`, kg: 0, count: 0 }));
   for (const e of eventsIn(events, w, "deposit")) {
     if (e.binId !== binId || e.level == null || e.level < 1 || e.level > levels) continue;
-    rows[e.level - 1].kg = round2(rows[e.level - 1].kg + e.kg);
+    rows[e.level - 1].kg = roundG(rows[e.level - 1].kg + e.kg);
     rows[e.level - 1].count += 1;
   }
   return rows;
@@ -166,7 +166,7 @@ export function trendSeries(events: BinEvent[], range: Range, now: number): Tren
     const i = Math.floor((Date.parse(e.at) - start) / size);
     if (i < 0 || i >= count) continue;
     const key = e.type === "deposit" ? "deposited" : "collected";
-    points[i][key] = round2(points[i][key] + e.kg);
+    points[i][key] = roundG(points[i][key] + e.kg);
   }
   return points;
 }

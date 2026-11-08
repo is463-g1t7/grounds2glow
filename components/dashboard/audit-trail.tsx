@@ -5,6 +5,7 @@ import { Download, Recycle } from "lucide-react";
 import { ChartCard } from "@/components/ui/chart-card";
 import { ago, eventsIn, type Window } from "@/lib/analytics";
 import { collectorOf, levelsFor } from "@/lib/bins";
+import { weight } from "@/lib/format";
 import { downloadCsv } from "@/lib/client/csv";
 import { cn } from "@/lib/utils";
 import type { Bin, BinEvent, Cleaner, EventSource } from "@/lib/types";
@@ -79,9 +80,9 @@ export function AuditTrail({
           collect ? "" : (c?.name ?? ""),
           collect ? "" : (c?.pass ?? ""),
           collect ? collectorOf(e) : "",
-          e.kg.toFixed(2),
-          e.beforeKg?.toFixed(2) ?? "",
-          e.afterKg?.toFixed(2) ?? "",
+          e.kg.toFixed(3),
+          e.beforeKg?.toFixed(3) ?? "",
+          e.afterKg?.toFixed(3) ?? "",
           e.source ?? "",
           e.photo ?? "",
         ];
@@ -190,11 +191,11 @@ export function AuditTrail({
                     </td>
                     <td className="py-2 pr-3 text-right align-top font-semibold tabular-nums">
                       {collect ? "−" : "+"}
-                      {e.kg.toFixed(2)} kg
+                      {weight(e.kg)}
                     </td>
                     <td className="py-2 pr-3 text-right align-top tabular-nums text-muted-foreground">
                       {e.beforeKg != null && e.afterKg != null
-                        ? `${e.beforeKg.toFixed(2)} → ${e.afterKg.toFixed(2)}`
+                        ? `${weight(e.beforeKg)} → ${weight(e.afterKg)}`
                         : "—"}
                     </td>
                     <td className="py-2 align-top">
@@ -218,7 +219,7 @@ export function AuditTrail({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-muted-foreground">
         <span className="tabular-nums">
-          {rows.length} entr{rows.length === 1 ? "y" : "ies"} · +{deposited.toFixed(2)} kg dropped off · −{collected.toFixed(2)} kg collected
+          {rows.length} entr{rows.length === 1 ? "y" : "ies"} · +{weight(deposited)} dropped off · −{weight(collected)} collected
         </span>
         {rows.length > PAGE && (
           <button type="button" onClick={() => setExpanded((v) => !v)} className="font-semibold text-smu-gold-dark underline underline-offset-2">

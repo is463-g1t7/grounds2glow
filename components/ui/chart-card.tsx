@@ -220,7 +220,7 @@ export function AreaTrend<T extends Record<string, unknown>>({
               </defs>
               <CartesianGrid vertical={false} stroke="var(--border)" />
               <XAxis dataKey={xKey as string} tickLine={false} axisLine={false} tick={AXIS} tickMargin={8} tickFormatter={xFormat} minTickGap={24} />
-              <YAxis tickLine={false} axisLine={false} tick={AXIS} tickFormatter={format} width={48} />
+              <YAxis tickLine={false} axisLine={false} tick={AXIS} tickFormatter={format} width={58} />
               <RTooltip
                 cursor={{ stroke: "var(--muted-foreground)", strokeWidth: 1 }}
                 content={<ChartTooltip series={series} format={format} labelFormat={xFormat} />}
@@ -271,7 +271,7 @@ export function BarCompare<T extends Record<string, unknown>>({
             <BarChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }} barGap={2} barCategoryGap="28%">
               <CartesianGrid vertical={false} stroke="var(--border)" />
               <XAxis dataKey={xKey as string} tickLine={false} axisLine={false} tick={AXIS} tickMargin={8} tickFormatter={xFormat} interval={0} />
-              <YAxis tickLine={false} axisLine={false} tick={AXIS} tickFormatter={format} width={48} />
+              <YAxis tickLine={false} axisLine={false} tick={AXIS} tickFormatter={format} width={58} />
               <RTooltip cursor={{ fill: "var(--accent)", opacity: 0.6 }} content={<ChartTooltip series={series} format={format} labelFormat={xFormat} />} />
               {series.map((s, i) => (
                 <Bar

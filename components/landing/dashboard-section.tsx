@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { ago } from "@/lib/analytics";
 import { statusFor } from "@/lib/bins";
+import { weight } from "@/lib/format";
 import { SCALE_FRAMES } from "@/lib/scales";
 import type { Bin, BinEvent, BinStatus, Cleaner } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -109,8 +110,8 @@ export function DashboardSection({
                         />
                       </span>
                       <span className="w-[132px] text-right text-[13px] tabular-nums">
-                        <span className="font-semibold">{bin.weightKg.toFixed(1)}</span>
-                        <span className="text-smu-muted"> / {bin.capacityKg} kg</span>
+                        <span className="font-semibold">{weight(bin.weightKg)}</span>
+                        <span className="text-smu-muted"> / {weight(bin.capacityKg)}</span>
                         <span className={cn("ml-2 inline-block w-[54px] text-left text-[11.5px] font-semibold", style.text)}>
                           {style.label}
                         </span>
@@ -129,7 +130,7 @@ export function DashboardSection({
                     <span className="min-w-0 truncate">{describeEvent(event, bins, cleaners)}</span>
                     <span className="shrink-0 tabular-nums text-smu-muted">
                       {event.type === "deposit" ? "+" : "−"}
-                      {event.kg.toFixed(2)} kg{now > 0 ? ` · ${ago(event.at, now)}` : ""}
+                      {weight(event.kg)}{now > 0 ? ` · ${ago(event.at, now)}` : ""}
                     </span>
                   </li>
                 ))}

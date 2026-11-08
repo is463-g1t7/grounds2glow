@@ -1,5 +1,10 @@
-/** Kilograms for charts and labels: whole numbers stay whole, the rest get one decimal. */
-export function kg(v: number): string {
-  const rounded = Math.round(v * 10) / 10;
-  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} kg`;
+/** A weight for people to read: grams under 1 kg ("129 g"), kilograms from there ("1.25 kg"). */
+export function weight(v: number): string {
+  const grams = Math.round(v * 1000);
+  if (Math.abs(grams) < 1000) return `${grams} g`;
+  const kilos = grams / 1000;
+  return `${Number(kilos.toFixed(Math.abs(kilos) >= 10 ? 1 : 2))} kg`;
 }
+
+/** Weights for charts and labels. */
+export const kg = weight;

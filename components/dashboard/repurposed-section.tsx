@@ -123,7 +123,7 @@ export function RepurposedSection({
                             {collectorOf(e)}
                           </span>
                         </td>
-                        <td className="py-2 pr-3 text-right align-top font-semibold tabular-nums">{e.kg.toFixed(2)} kg</td>
+                        <td className="py-2 pr-3 text-right align-top font-semibold tabular-nums">{kg(e.kg)}</td>
                         <td className="py-2 text-right align-top tabular-nums text-muted-foreground">
                           {b ? `${Math.round((e.kg / b.capacityKg) * 100)}%` : "—"}
                         </td>

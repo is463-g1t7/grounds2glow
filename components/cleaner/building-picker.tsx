@@ -1,45 +1,47 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Truck } from "lucide-react";
 import { CampusMap } from "@/components/smu/campus-map";
 import { ago } from "@/lib/analytics";
 import { levelsFor, statusFor } from "@/lib/bins";
-import { useBootstrap } from "@/lib/client/use-bootstrap";
-import { SCALE_FRAMES } from "@/lib/scales";
-import { CleanerShell, NeedsPass, StepColumns } from "./cleaner-shell";
+import { weight } from "@/lib/format";
+import { setStation, useDemoMode, useStation } from "@/lib/client/station";
+import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
+import { useNow } from "@/lib/client/use-now";
+import type { Bin, BinEvent, BinStatus, Cleaner } from "@/lib/types";
+import { CleanerShell, LoadingPanel, NeedsPass } from "./cleaner-shell";
 
 const NO_DIM = new Set<string>();
-const MAX_FRAME_KG = Math.max(...SCALE_FRAMES.map((f) => f.refKg));
 
-// ponytail: minute-granularity clock; per-second tick if "ago" labels need it
-function useNow(stepMs = 60_000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), stepMs);
-    return () => window.clearInterval(id);
-  }, [stepMs]);
-  return now;
-}
+const STATUS_TEXT: Record<BinStatus, string> = {
+  ok: "Has room",
+  near: "Nearly full",
+  full: "Full · swap first",
+};
+
+const STATUS_DOT: Record<BinStatus, string> = {
+  ok: "bg-smu-success",
+  near: "bg-smu-warning",
+  full: "bg-smu-danger",
+};
 
 export function BuildingPicker() {
-  const router = useRouter();
   const params = useSearchParams();
-  const { data, loading } = useBootstrap();
+  const { data, loading, refresh } = useBootstrap();
+  const station = useStation();
+  const demo = useDemoMode();
   const cleaner = data.cleaners.find((c) => c.id === params.get("cleaner"));
-  const bins = data.bins;
-  const events = data.events;
-  const now = useNow();
-  const [binId, setBinId] = useState<string | null>(null);
-  const [level, setLevel] = useState<number | null>(null);
+  const stationBin = data.bins.find((b) => b.id === station) ?? null;
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   if (loading) {
     return (
       <CleanerShell step={2}>
-        <p className="rounded-md border border-black/10 bg-white p-5 text-[13px] text-smu-muted shadow-card">
-          Loading bins…
-        </p>
+        <LoadingPanel label="Loading pantries…" />
       </CleanerShell>
     );
   }
@@ -52,196 +54,291 @@ export function BuildingPicker() {
     );
   }
 
-  const bin = bins.find((b) => b.id === binId) ?? null;
+  // A laptop set up for one bin opens on that bin's levels; any building can still be picked.
+  const activeId = listOpen ? null : (pickedId ?? stationBin?.id ?? null);
+  const active = data.bins.find((b) => b.id === activeId) ?? null;
 
-  function open(id: string) {
-    setBinId(id);
-    setLevel(null);
+  function pick(id: string) {
+    setPickedId(id);
+    setListOpen(false);
+    // On narrow screens the panel sits below the map, so bring the levels into view.
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      window.setTimeout(() => panelRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
   }
-
-  function lastEmptied(id: string, l: number): string | null {
-    const e = events.find((x) => x.type === "deposit" && x.binId === id && x.level === l);
-    return e ? ago(e.at, now) : null;
-  }
-
-  function confirm() {
-    if (!bin || level == null || !cleaner) return;
-    router.push(`/cleaner/weigh?cleaner=${cleaner.id}&bin=${bin.id}&level=${level}`);
-  }
-
-  const levelPanel = (titleId: string, onClose?: () => void) =>
-    bin && (
-      <>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-display text-[11px] uppercase tracking-[2px] text-smu-gold">
-              {bin.short}
-            </p>
-            <h2 id={titleId} className="font-display text-[26px] leading-8 text-smu-navy">
-              Which pantry did the grounds come from?
-            </h2>
-            <p className="mt-1 text-[13px] text-smu-muted">
-              {bin.name} · central bin at {bin.weightKg.toFixed(1)} kg
-            </p>
-          </div>
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-smu-muted transition-colors hover:bg-smu-cream hover:text-smu-navy"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-
-        {bin.weightKg >= MAX_FRAME_KG && (
-          <p className="mt-3 rounded border border-smu-warning/30 bg-smu-warning/10 px-3 py-2 text-[13px] text-[#8a6209]">
-            This bin is nearly full. You&apos;ll be asked to swap it before weighing.
-          </p>
-        )}
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {Array.from({ length: levelsFor(bin) }, (_, i) => i + 1).map((l) => {
-            const last = lastEmptied(bin.id, l);
-            return (
-              <button
-                key={l}
-                type="button"
-                onClick={() => setLevel(l)}
-                aria-pressed={level === l}
-                className={`flex flex-col items-center rounded border px-2 py-3 transition-colors ${
-                  level === l
-                    ? "border-smu-gold bg-smu-gold text-white"
-                    : "border-black/10 bg-white hover:bg-smu-cream"
-                }`}
-              >
-                <span className="font-display text-[20px] leading-6">L{l}</span>
-                <span className={`text-[10.5px] ${level === l ? "text-white/75" : "text-smu-muted"}`}>
-                  {last ? `emptied ${last}` : "no record"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={confirm}
-          disabled={level == null}
-          className="btn-smu btn-smu-gold mt-4 w-full disabled:opacity-40"
-        >
-          {level == null ? "Select a level" : `Confirm ${bin.short} · L${level} pantry →`}
-        </button>
-      </>
-    );
-
-  const buildingList = (
-    <ul className="grid grid-cols-2 gap-2">
-      {bins.map((b) => {
-        const s = statusFor(b.weightKg, b.capacityKg);
-        return (
-          <li key={b.id}>
-            <button
-              type="button"
-              onClick={() => open(b.id)}
-              className={`flex w-full flex-col rounded border bg-white px-3 py-2 text-left transition-colors ${
-                b.id === binId
-                  ? "border-smu-gold shadow-[0_0_0_2px_rgba(138,112,76,0.35)]"
-                  : "border-black/10 hover:border-black/30"
-              }`}
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-smu-navy">{b.short}</span>
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    s === "full" ? "bg-smu-danger" : s === "near" ? "bg-smu-warning" : "bg-smu-success"
-                  }`}
-                />
-              </span>
-              <span className="truncate text-[11px] text-smu-muted">{b.name}</span>
-              <span className="text-[11px] tabular-nums text-smu-muted">
-                Bin {b.weightKg.toFixed(1)} / {b.capacityKg} kg
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
-  );
 
   return (
-    <CleanerShell step={2} cleaner={cleaner}>
-      <StepColumns
-        main={
-          <>
-            <div>
-              <h1 className="font-display text-[30px] leading-9 text-smu-navy">
+    <CleanerShell
+      step={2}
+      cleaner={cleaner}
+      where={active ? `${active.short} central bin` : undefined}
+    >
+      <div className="grid flex-1 items-start gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(360px,1fr)] lg:gap-8">
+        <div className="lg:sticky lg:top-6">
+          <CampusMap
+            variant="large"
+            bins={data.bins}
+            selectedId={activeId ?? ""}
+            hereId={stationBin?.id}
+            dimmedIds={NO_DIM}
+            onSelect={pick}
+            caption={
+              <>
+                Tap your building on the map or in the list. Pin colours show how full each bin
+                is. <span className="text-black/50">Campus art: SMU Sustainability Office.</span>
+              </>
+            }
+          />
+        </div>
+
+        <div ref={panelRef} className="scroll-mt-6">
+          {active ? (
+            <div key={active.id} className="fade-up flex flex-col gap-5">
+              <button
+                type="button"
+                onClick={() => setListOpen(true)}
+                className="cleaner-link text-[15px]"
+              >
+                <ArrowLeft className="h-4 w-4" /> All buildings
+              </button>
+              <LevelPicker
+                bin={active}
+                events={data.events}
+                cleaner={cleaner}
+                onSwapped={refresh}
+                footer={
+                  demo && active.id !== station ? (
+                    <button
+                      type="button"
+                      onClick={() => setStation(active.id)}
+                      className="rounded border border-dashed border-black/25 px-4 py-2.5 text-[15px] font-semibold text-black/75 hover:border-smu-navy hover:text-smu-navy"
+                    >
+                      Demo: set this laptop as the {active.short} station
+                    </button>
+                  ) : null
+                }
+              />
+            </div>
+          ) : (
+            <div className="fade-up flex flex-col gap-4">
+              <h1 className="font-display text-[34px] leading-[42px] text-smu-navy">
                 Which building are you at?
               </h1>
-              <p className="text-[13px] text-smu-muted">Tap a pin on the map or pick from the list.</p>
+              <ul className="flex flex-col gap-2" aria-label="Buildings">
+                {data.bins.map((b) => {
+                  const s = statusFor(b.weightKg, b.capacityKg);
+                  return (
+                    <li key={b.id}>
+                      <button
+                        type="button"
+                        onClick={() => pick(b.id)}
+                        className="flex min-h-14 w-full items-center gap-3 rounded-md border border-black/10 bg-white px-4 py-2 text-left transition-colors hover:border-smu-navy/50"
+                      >
+                        <span className="w-16 shrink-0 font-display text-[20px] leading-6 text-smu-navy">
+                          {b.short}
+                        </span>
+                        <span className="min-w-0 flex-1 text-[14px] leading-5 text-black/75">
+                          {b.name}
+                          {b.id === station && (
+                            <span className="ml-1.5 whitespace-nowrap font-semibold text-smu-navy">
+                              · You are here
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2 text-[14px] text-black/75">
+                          <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[s]}`} />
+                          {STATUS_TEXT[s]}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-
-            <CampusMap bins={bins} selectedId={binId ?? ""} dimmedIds={NO_DIM} onSelect={open} />
-
-            <div className="lg:hidden">{buildingList}</div>
-          </>
-        }
-        side={
-          // Laptop: buildings, then the level picker, sit beside the map instead of below/over it.
-          <section className="hidden rounded-md border border-black/10 bg-white p-5 shadow-card lg:block">
-            {bin ? (
-              <div key={bin.id} className="fade-up">
-                <div className="mb-4 flex flex-wrap gap-1.5" aria-label="Switch building">
-                  {bins.map((b) => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      onClick={() => open(b.id)}
-                      aria-pressed={b.id === bin.id}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        b.id === bin.id
-                          ? "bg-smu-navy text-white"
-                          : "border border-black/10 text-smu-muted hover:bg-smu-cream"
-                      }`}
-                    >
-                      {b.short}
-                    </button>
-                  ))}
-                </div>
-                {levelPanel("level-title-side")}
-              </div>
-            ) : (
-              <>
-                <h2 className="font-display text-[24px] leading-7 text-smu-navy">Pick a building</h2>
-                <p className="mb-3 text-[13px] text-smu-muted">
-                  Its pantry levels appear here, with when each was last emptied.
-                </p>
-                {buildingList}
-              </>
-            )}
-          </section>
-        }
-      />
-
-      {/* Phone: bottom sheet over the map. */}
-      {bin && (
-        <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-smu-navy-deep/50 p-0 sm:items-center sm:p-4 lg:hidden"
-          onClick={() => setBinId(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="level-title"
-            onClick={(e) => e.stopPropagation()}
-            className="fade-up w-full max-w-md rounded-t-lg bg-white p-5 shadow-2xl sm:rounded-lg"
-          >
-            {levelPanel("level-title", () => setBinId(null))}
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </CleanerShell>
+  );
+}
+
+/** One big button per pantry level. Number keys pick a level too. */
+function LevelPicker({
+  bin,
+  events,
+  cleaner,
+  onSwapped,
+  footer,
+}: {
+  bin: Bin;
+  events: BinEvent[];
+  cleaner: Cleaner;
+  onSwapped: () => Promise<unknown>;
+  footer?: ReactNode;
+}) {
+  const router = useRouter();
+  const now = useNow();
+  const [swapping, setSwapping] = useState(false);
+  const [swapError, setSwapError] = useState<string | null>(null);
+  const [swapped, setSwapped] = useState(false);
+  const levels = levelsFor(bin);
+  const status = statusFor(bin.weightKg, bin.capacityKg);
+  const full = status === "full";
+  const room = Math.max(0, bin.capacityKg - bin.weightKg);
+
+  const go = useRef<(level: number) => void>(() => {});
+  useEffect(() => {
+    go.current = (level: number) => {
+      if (full || level < 1 || level > levels) return;
+      router.push(`/cleaner/weigh?cleaner=${cleaner.id}&bin=${bin.id}&level=${level}`);
+    };
+  });
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      const n = Number(e.key);
+      if (Number.isInteger(n) && n >= 1) go.current(n);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function lastDropOff(level: number): string | null {
+    const e = events.find((x) => x.type === "deposit" && x.binId === bin.id && x.level === level);
+    return e && now ? ago(e.at, now) : null;
+  }
+
+  async function swap() {
+    setSwapping(true);
+    setSwapError(null);
+    try {
+      await apiRequest("/api/collect", {
+        method: "POST",
+        body: JSON.stringify({ binId: bin.id, cleanerId: cleaner.id }),
+      });
+      await onSwapped();
+      setSwapped(true);
+    } catch (err) {
+      setSwapError(err instanceof Error ? err.message : "Couldn't log the swap. Try again.");
+    } finally {
+      setSwapping(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="font-display text-[34px] leading-[42px] text-smu-navy">
+          Which level are the grounds from?
+        </h1>
+        <p className="mt-1 text-[17px] text-black/75">
+          <span className="font-semibold text-black">{bin.short}</span> · {bin.name}
+        </p>
+      </div>
+
+      <BinFill bin={bin} />
+
+      {full ? (
+        <div className="flex flex-col gap-3 rounded-md border border-smu-danger/30 bg-white p-4">
+          <div>
+            <p className="text-[17px] font-semibold text-[#a52a25]">The {bin.short} bin is full</p>
+            <p className="mt-1 text-[15px] leading-6 text-black/75">
+              Swap in an empty bin before weighing new grounds.
+            </p>
+            {swapError && <p className="mt-2 text-[15px] text-[#a52a25]">{swapError}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={() => void swap()}
+            disabled={swapping}
+            className="btn-smu btn-smu-gold h-12 px-5 disabled:opacity-60"
+          >
+            <Truck className="h-5 w-5" /> {swapping ? "Logging swap…" : "I've swapped in an empty bin"}
+          </button>
+        </div>
+      ) : (
+        status === "near" && (
+          <p className="text-[16px] text-black/75">
+            Nearly full: room for about {weight(room)} more.
+          </p>
+        )
+      )}
+
+      {swapped && !full && (
+        <p
+          role="status"
+          className="rounded border border-smu-gold/40 bg-smu-cream-light px-4 py-3 text-[16px] leading-6 text-black/85"
+        >
+          Bin swapped. Put the empty bin on the scale and press <strong>Z/T</strong>, then add the
+          grounds.
+        </p>
+      )}
+
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2" aria-label="Pantry levels">
+        {Array.from({ length: levels }, (_, i) => i + 1).map((level) => {
+          const last = lastDropOff(level);
+          return (
+            <li key={level}>
+              <button
+                type="button"
+                disabled={full}
+                onClick={() => go.current(level)}
+                className="group relative flex h-full min-h-24 w-full flex-col items-start justify-between gap-1 rounded-md border border-black/10 bg-white px-4 py-3 text-left shadow-card transition-[border-color,box-shadow] hover:border-smu-gold hover:shadow-lift disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-black/10 disabled:hover:shadow-card"
+              >
+                <span className="font-display text-[32px] leading-10 text-smu-navy group-hover:text-smu-gold-dark">
+                  Level {level}
+                </span>
+                <span className="text-[14px] leading-5 text-black/70">
+                  {last ? `Last drop-off ${last}` : "No drop-offs yet"}
+                </span>
+                <kbd
+                  aria-hidden
+                  className="absolute right-3 top-3 hidden rounded border border-black/15 px-2 py-0.5 font-sans text-[13px] text-black/55 lg:block"
+                >
+                  {level}
+                </kbd>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="hidden text-[15px] text-black/60 lg:block">
+        Tip: press a number key to pick that level.
+      </p>
+      {footer}
+    </div>
+  );
+}
+
+function BinFill({ bin }: { bin: Bin }) {
+  const s = statusFor(bin.weightKg, bin.capacityKg);
+  const pct = Math.min(100, (bin.weightKg / bin.capacityKg) * 100);
+  return (
+    <div>
+      <p className="flex items-baseline justify-between gap-3 text-[15px] text-black/75">
+        <span>Bin now</span>
+        <span>
+          <span className="font-display text-[24px] tabular-nums text-smu-navy">
+            {weight(bin.weightKg)}
+          </span>{" "}
+          of {weight(bin.capacityKg)} · {STATUS_TEXT[s].toLowerCase()}
+        </span>
+      </p>
+      <div
+        role="meter"
+        aria-label={`${bin.short} bin fill`}
+        aria-valuemin={0}
+        aria-valuemax={bin.capacityKg}
+        aria-valuenow={bin.weightKg}
+        aria-valuetext={`${weight(bin.weightKg)} of ${weight(bin.capacityKg)}, ${STATUS_TEXT[s].toLowerCase()}`}
+        className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-black/10"
+      >
+        <div className={`h-full rounded-full ${STATUS_DOT[s]}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }

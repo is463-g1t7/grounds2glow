@@ -6,6 +6,7 @@ import { ArrowUpRight, Camera, ScanLine, Upload } from "lucide-react";
 import { PageHeader } from "@/components/smu/page-chrome";
 import { Toast } from "@/components/smu/toast";
 import { levelsFor, pantryLabel } from "@/lib/bins";
+import { weight } from "@/lib/format";
 import { pickFrame } from "@/lib/scales";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import type { BinEvent } from "@/lib/types";
@@ -89,7 +90,7 @@ export default function ScanPage() {
       });
       if (kg <= bin.weightKg) {
         throw new Error(
-          `Scale reads ${kg.toFixed(2)} kg, not above the bin's ${bin.weightKg.toFixed(2)} kg. Collect the bin first or use a different frame.`
+          `Scale reads ${weight(kg)}, not above the bin's ${weight(bin.weightKg)}. Collect the bin first or use a different frame.`
         );
       }
       const { event } = await apiRequest<{ event: BinEvent }>("/api/readings", {
@@ -102,7 +103,7 @@ export default function ScanPage() {
         at: event.at,
         pantry: event.pantry ?? pantryLabel(bin, safeLevel),
       });
-      setToast(`${pantryLabel(bin, safeLevel)} logged at ${kg.toFixed(2)} kg.`);
+      setToast(`${pantryLabel(bin, safeLevel)} logged at ${weight(kg)}.`);
       setPhase("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not read the scale.");
@@ -175,7 +176,7 @@ export default function ScanPage() {
               >
                 {bins.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.name} ({b.short}) · {b.weightKg.toFixed(1)} kg
+                    {b.name} ({b.short}) · {weight(b.weightKg)}
                   </option>
                 ))}
               </select>
@@ -281,7 +282,7 @@ export default function ScanPage() {
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-smu-muted">phone ocr</dt>
-                  <dd className="tabular-nums">{result ? `${result.kg.toFixed(2)} kg` : "…"}</dd>
+                  <dd className="tabular-nums">{result ? weight(result.kg) : "…"}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-smu-muted">upload</dt>
@@ -292,7 +293,7 @@ export default function ScanPage() {
                 <div className="mt-2 border-t border-black/10 pt-3 font-sans text-[13px] text-smu-muted">
                   <p>
                     <span className="font-semibold text-smu-navy">{result.pantry ?? bin?.name}</span> now
-                    reads <span className="font-semibold tabular-nums">{result.kg.toFixed(2)} kg</span>.
+                    reads <span className="font-semibold tabular-nums">{weight(result.kg)}</span>.
                   </p>
                   <Link href={`/dashboard?bin=${selectedId}`} className="text-link mt-3 text-[13px]">
                     View on dashboard <ArrowUpRight className="h-3.5 w-3.5" />

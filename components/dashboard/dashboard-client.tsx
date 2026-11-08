@@ -75,13 +75,13 @@ export function DashboardClient() {
     const fresh = events.filter((e) => !seenEvents.current?.has(e.id));
     for (const e of fresh) seenEvents.current.add(e.id);
     const live = fresh.find(
-      (e) => e.type === "deposit" && (e.source === "ocr" || e.source === "reference") && e.cleanerId
+      (e) => e.type === "deposit" && (e.source === "ocr" || e.source === "reference" || e.source === "manual") && e.cleanerId
     );
     if (!live) return;
     const who = cleaners.find((c) => c.id === live.cleanerId)?.name ?? "A cleaner";
     setLiveId(live.id);
     setSelectedId(live.binId);
-    setToast(`Live drop-off: ${who} emptied ${live.pantry} (+${live.kg.toFixed(2)} kg).`);
+    setToast(`Live drop-off: ${who} emptied ${live.pantry} (+${kg(live.kg)}).`);
   }, [events, cleaners]);
 
   useEffect(() => {
@@ -153,7 +153,7 @@ export function DashboardClient() {
     try {
       await apiRequest("/api/collect", { method: "POST", body: JSON.stringify({ binId: id }) });
       await data.refresh();
-      setToast(`${b.short}: ${b.weightKg.toFixed(2)} kg logged as repurposed by ${COLLECTOR_LABEL}.`);
+      setToast(`${b.short}: ${kg(b.weightKg)} logged as repurposed by ${COLLECTOR_LABEL}.`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Unable to collect bin.");
     }
@@ -188,7 +188,7 @@ export function DashboardClient() {
     const name = (e: BinEvent) => cleaners.find((c) => c.id === e.cleanerId)?.name ?? "";
     downloadCsv("smu-circular-coffee-report.csv", [
       ["bin", "building", "school", "weight_kg", "capacity_kg", "status", "updated_at"],
-      ...bins.map((b) => [b.id, b.name, b.short, b.weightKg.toFixed(2), b.capacityKg, statusFor(b.weightKg, b.capacityKg), b.updatedAt]),
+      ...bins.map((b) => [b.id, b.name, b.short, b.weightKg.toFixed(3), b.capacityKg, statusFor(b.weightKg, b.capacityKg), b.updatedAt]),
       [],
       ["time", "bin", "type", "level", "cleaner", "collected_by", "kg", "before_kg", "after_kg", "source"],
       ...events.map((e) => [
@@ -198,9 +198,9 @@ export function DashboardClient() {
         e.level != null ? `L${e.level}` : "",
         e.type === "deposit" ? name(e) : "",
         e.type === "collect" ? collectorOf(e) : "",
-        e.kg.toFixed(2),
-        e.beforeKg?.toFixed(2) ?? "",
-        e.afterKg?.toFixed(2) ?? "",
+        e.kg.toFixed(3),
+        e.beforeKg?.toFixed(3) ?? "",
+        e.afterKg?.toFixed(3) ?? "",
         e.source ?? "",
       ]),
     ]);

@@ -1,13 +1,21 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { Check } from "lucide-react";
 import { statusFor } from "@/lib/bins";
+import { weight } from "@/lib/format";
 import type { Bin } from "@/lib/types";
 
-const PINS: Record<string, { x: number; y: number; narrow?: { x: number; y: number } }> = {
+type Offset = { x: number; y: number };
+
+/**
+ * Pin positions as % of the full illustration. `narrow` nudges close pins apart on small screens;
+ * `wide` does the same for the large pins on laptop screens.
+ */
+const PINS: Record<string, { x: number; y: number; narrow?: Offset; wide?: Offset }> = {
   "bin-soa": { x: 39, y: 53 },
-  "bin-soe": { x: 35, y: 17, narrow: { x: -20, y: 0 } },
-  "bin-scis": { x: 38, y: 21, narrow: { x: 16, y: 6 } },
+  "bin-soe": { x: 35, y: 17, narrow: { x: -20, y: 0 }, wide: { x: -30, y: -8 } },
+  "bin-scis": { x: 38, y: 21, narrow: { x: 16, y: 6 }, wide: { x: 30, y: 10 } },
   "bin-yphsl": { x: 26, y: 67, narrow: { x: 6, y: 5 } },
   "bin-soss": { x: 15, y: 59, narrow: { x: -6, y: -5 } },
   "bin-lib": { x: 54, y: 38 },
@@ -20,6 +28,8 @@ const DOT: Record<string, string> = {
   full: "bg-smu-danger",
 };
 
+const PIN_BG: Record<string, string> = { ok: "#3EB33E", near: "#E6A422", full: "#D93C36" };
+
 const LABEL: Record<string, string> = { ok: "OK", near: "Near full", full: "Full" };
 
 export function CampusMap({
@@ -27,17 +37,27 @@ export function CampusMap({
   selectedId,
   dimmedIds,
   onSelect,
+  variant = "compact",
+  hereId,
+  caption,
 }: {
   bins: Bin[];
   selectedId: string;
   dimmedIds: Set<string>;
   onSelect: (id: string) => void;
+  /** `large` shows the whole illustration with big pins and no hover cards, for picking a place. */
+  variant?: "compact" | "large";
+  /** Marks this bin "You are here", for a laptop set up at that bin. */
+  hereId?: string | null;
+  caption?: ReactNode;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const large = variant === "large";
   return (
     <figure className="overflow-hidden rounded-md border border-black/10 bg-white">
-      <div className="relative overflow-hidden md:aspect-[1024/403]">
-        <div className="relative md:-translate-y-[14%]">
+      <div className={`relative overflow-hidden ${large ? "" : "md:aspect-[1024/403]"}`}>
+        <div className={`relative ${large ? "" : "md:-translate-y-[14%]"}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/images/smu-campus-map.jpeg"
             alt="Illustrated map of the SMU campus"
@@ -52,6 +72,43 @@ export function CampusMap({
             const pct = Math.min(100, (b.weightKg / b.capacityKg) * 100);
             const tx = p.x > 78 ? "-85%" : p.x < 22 ? "-15%" : "-50%";
             const ty = p.y < 36 ? "18px" : "calc(-100% - 18px)";
+
+            if (large) {
+              const here = b.id === hereId;
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => onSelect(b.id)}
+                  aria-label={`${b.name}${here ? ", this station" : ""}, bin ${LABEL[s].toLowerCase()}`}
+                  aria-pressed={selected}
+                  className={`campus-pin-lg absolute flex min-h-9 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[13px] font-bold text-white shadow-[0_4px_10px_-2px_rgb(0_0_0/0.45)] transition-transform hover:scale-110 lg:min-h-11 lg:px-3.5 lg:text-[16px] ${
+                    selected ? "z-[5] scale-110" : "z-[1]"
+                  } ${dim && !selected ? "opacity-25 saturate-0" : ""}`}
+                  style={{
+                    left: `${p.x}%`,
+                    top: `${p.y}%`,
+                    backgroundColor: PIN_BG[s],
+                    ...(p.narrow
+                      ? ({ "--nx": `${p.narrow.x}px`, "--ny": `${p.narrow.y}px` } as CSSProperties)
+                      : undefined),
+                    ...(p.wide
+                      ? ({ "--wx": `${p.wide.x}px`, "--wy": `${p.wide.y}px` } as CSSProperties)
+                      : undefined),
+                    ...(selected ? { boxShadow: "0 0 0 3px #fff, 0 0 0 6px #8A704C" } : undefined),
+                  }}
+                >
+                  {selected && <Check className="h-4 w-4" strokeWidth={3} />}
+                  {b.short}
+                  {here && (
+                    <span className="pointer-events-none absolute left-1/2 top-full mt-2 hidden -translate-x-1/2 rounded bg-smu-navy px-2 py-0.5 text-[13px] font-semibold text-white shadow-md lg:block">
+                      You are here
+                    </span>
+                  )}
+                </button>
+              );
+            }
+
             return (
               <div key={b.id}>
                 <button
@@ -61,7 +118,7 @@ export function CampusMap({
                   onMouseLeave={() => setHoveredId(null)}
                   onFocus={() => setHoveredId(b.id)}
                   onBlur={() => setHoveredId(null)}
-                  aria-label={`${b.name}, ${b.weightKg.toFixed(2)} kilograms`}
+                  aria-label={`${b.name}, ${weight(b.weightKg)}`}
                   aria-pressed={selected}
                   className={`campus-pin absolute rounded-full px-2 py-1 text-[10.5px] font-bold text-white shadow-md transition hover:scale-110 ${
                     selected ? "z-[5] animate-pulse" : ""
@@ -72,8 +129,7 @@ export function CampusMap({
                     ...(p.narrow
                       ? ({ "--nx": `${p.narrow.x}px`, "--ny": `${p.narrow.y}px` } as CSSProperties)
                       : undefined),
-                    backgroundColor:
-                      s === "full" ? "#D93C36" : s === "near" ? "#E6A422" : "#3EB33E",
+                    backgroundColor: PIN_BG[s],
                     ...(selected ? { boxShadow: "0 0 0 3px #fff, 0 0 0 6px #8A704C" } : undefined),
                   }}
                 >
@@ -94,9 +150,8 @@ export function CampusMap({
                     <p className="text-[11px] text-smu-muted">{b.pantry}</p>
                     <p className="mt-1 flex items-baseline gap-1">
                       <span className="font-display text-[20px] leading-6 text-smu-navy">
-                        {b.weightKg.toFixed(2)}
+                        {weight(b.weightKg)}
                       </span>
-                      <span className="text-[11px] text-smu-muted">kg</span>
                       <span className={`ml-auto h-2 w-2 rounded-full ${DOT[s]}`} />
                       <span className="text-[10px] font-bold uppercase tracking-[0.6px] text-smu-muted">
                         {LABEL[s]}
@@ -116,9 +171,17 @@ export function CampusMap({
           })}
         </div>
       </div>
-      <figcaption className="border-t border-black/8 bg-smu-cream/60 px-4 py-2 text-[11px] text-smu-muted">
-        Campus art: SMU Sustainability Office · pins show live fill — green OK, amber near-full,
-        red full. Hover a pin for its reading.
+      <figcaption
+        className={`border-t border-black/8 bg-smu-cream/60 px-4 py-2 text-smu-muted ${
+          large ? "text-[14px] leading-5" : "text-[11px]"
+        }`}
+      >
+        {caption ?? (
+          <>
+            Campus art: SMU Sustainability Office · pins show live fill — green OK, amber near-full,
+            red full. Hover a pin for its reading.
+          </>
+        )}
       </figcaption>
     </figure>
   );

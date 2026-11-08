@@ -1,11 +1,14 @@
 import { ACCEPTED_TYPES, MAX_BYTES } from "@/lib/languages";
 import { OcrUpstreamError, OcrWakingError, runOcr } from "@/lib/ocr";
-import { parseScaleKg } from "@/lib/scale-reading";
+import { parseScaleReading } from "@/lib/scale-reading";
 
 // A sleeping Space has to load its models before it can answer.
 export const maxDuration = 60;
 
-/** Reads a photo of the scale display with PaddleOCR on Hugging Face, and finds the weight. */
+/**
+ * Reads a photo of the scale display with PaddleOCR on Hugging Face, and finds the weight.
+ * Optional form fields: `unit` ("kg" or "g", the station scale's unit) and `capacityKg`.
+ */
 export async function POST(request: Request) {
   let form: FormData;
   try {
@@ -27,7 +30,13 @@ export async function POST(request: Request) {
 
   try {
     const lines = await runOcr(image);
-    return Response.json({ lines, kg: parseScaleKg(lines) });
+    const unit = form.get("unit");
+    const capacity = Number(form.get("capacityKg"));
+    const reading = parseScaleReading(lines, {
+      stationUnit: unit === "g" || unit === "kg" ? unit : null,
+      capacityKg: Number.isFinite(capacity) && capacity > 0 ? capacity : undefined,
+    });
+    return Response.json({ lines, kg: reading?.kg ?? null, reading });
   } catch (error) {
     if (error instanceof OcrWakingError) {
       return Response.json(

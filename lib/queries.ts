@@ -23,6 +23,8 @@ import type {
 } from "./types";
 
 const num = (v: string | number | null) => Number(v ?? 0);
+/** Weights are kept to the gram. */
+const roundG = (n: number) => Math.round(n * 1000) / 1000;
 const iso = (v: Date) => v.toISOString();
 
 type EventRow = typeof binEvents.$inferSelect;
@@ -190,7 +192,7 @@ export async function createReading(input: ReadingInput): Promise<BinEvent | nul
     }
 
     const before = num(bin.weightKg);
-    const after = Math.min(num(bin.capacityKg), Math.max(0, Math.round(input.afterKg * 100) / 100));
+    const after = Math.min(num(bin.capacityKg), Math.max(0, roundG(input.afterKg)));
     if (after <= before) return null;
 
     const at = new Date();
@@ -202,7 +204,7 @@ export async function createReading(input: ReadingInput): Promise<BinEvent | nul
         level: input.level,
         pantry: `${bin.short} · L${input.level}`,
         type: "deposit",
-        kg: String(Math.round((after - before) * 100) / 100),
+        kg: String(roundG(after - before)),
         cleanerId: input.cleanerId ?? null,
         source: input.source,
         beforeKg: String(before),
@@ -265,7 +267,7 @@ export async function syncRandomReading(): Promise<BinEvent | null> {
   const level = 1 + Math.floor(Math.random() * bin.levels);
   const afterKg = Math.min(
     bin.capacityKg,
-    Math.round((bin.weightKg + 0.1 + Math.random() * 0.3) * 100) / 100
+    roundG(bin.weightKg + bin.capacityKg * (0.01 + Math.random() * 0.03))
   );
   return createReading({ binId: bin.id, level, afterKg, source: "ocr" });
 }
@@ -279,7 +281,7 @@ export async function simulateStep(): Promise<BinEvent | null> {
   const level = 1 + Math.floor(Math.random() * bin.levels);
   const afterKg = Math.min(
     bin.capacityKg,
-    Math.round((bin.weightKg + 0.2 + Math.random() * 0.6) * 100) / 100
+    roundG(bin.weightKg + bin.capacityKg * (0.02 + Math.random() * 0.06))
   );
   const event = await createReading({ binId: bin.id, level, afterKg, source: "demo" });
   const next = await getBins();

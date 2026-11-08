@@ -1,6 +1,7 @@
 "use client";
 
 import type { OcrLine } from "@/lib/languages";
+import type { ScaleReading, ScaleUnit } from "@/lib/scale-reading";
 
 /** Part of an image, as fractions of its width and height. */
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -42,10 +43,20 @@ export function imageSize(source: HTMLImageElement | HTMLCanvasElement) {
  * Sends the scale display to the OCR service and returns what it read.
  * Only `crop` is uploaded (or the whole image when it's null). Boxes come back in full-image pixels.
  */
+export type ReadOptions = {
+  /** The station scale's unit, used when the display's own unit can't be read. */
+  unit?: ScaleUnit | null;
+  /** The bin's capacity: a unitless reading too heavy for it is read as grams. */
+  capacityKg?: number;
+};
+
+export type ScaleResult = { lines: OcrLine[]; kg: number | null; reading: ScaleReading | null };
+
 export async function readScale(
   source: HTMLImageElement | HTMLCanvasElement,
   crop: Rect | null,
-): Promise<{ lines: OcrLine[]; kg: number | null }> {
+  options: ReadOptions = {},
+): Promise<ScaleResult> {
   const { width, height } = imageSize(source);
   const area = crop ?? { x: 0, y: 0, w: 1, h: 1 };
   const left = Math.round(area.x * width);
@@ -66,10 +77,13 @@ export async function readScale(
 
   const form = new FormData();
   form.append("image", new File([blob], "scale.jpg", { type: "image/jpeg" }));
+  if (options.unit) form.append("unit", options.unit);
+  if (options.capacityKg != null) form.append("capacityKg", String(options.capacityKg));
   const res = await fetch("/api/ocr/scale", { method: "POST", body: form, cache: "no-store" });
   const body = (await res.json().catch(() => ({}))) as {
     lines?: OcrLine[];
     kg?: number | null;
+    reading?: ScaleReading | null;
     error?: string;
     waking?: boolean;
   };
@@ -82,6 +96,7 @@ export async function readScale(
       box: line.box.map(([x, y]) => [left + x / scale, top + y / scale]),
     })),
     kg: body.kg ?? null,
+    reading: body.reading ?? null,
   };
 }
 
@@ -96,12 +111,16 @@ const WAKE_RETRY_EVERY_MS = 8_000;
 export async function readScaleWhenAwake(
   source: HTMLImageElement | HTMLCanvasElement,
   crop: Rect | null,
-  { isCurrent, onWaking }: { isCurrent: () => boolean; onWaking: () => void },
-): Promise<{ lines: OcrLine[]; kg: number | null; ms: number } | null> {
+  {
+    isCurrent,
+    onWaking,
+    ...options
+  }: ReadOptions & { isCurrent: () => boolean; onWaking: () => void },
+): Promise<(ScaleResult & { ms: number }) | null> {
   const started = Date.now();
   for (;;) {
     try {
-      const result = await readScale(source, crop);
+      const result = await readScale(source, crop, options);
       return isCurrent() ? { ...result, ms: Date.now() - started } : null;
     } catch (err) {
       if (!isCurrent()) return null;

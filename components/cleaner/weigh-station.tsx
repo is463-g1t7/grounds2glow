@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import {
-  Camera,
   CheckCircle2,
   ImageIcon,
+  Keyboard,
   RefreshCw,
   ScanText,
+  Smartphone,
   Truck,
   Upload,
-  type LucideIcon,
 } from "lucide-react";
 import { BoxOverlay } from "@/components/smu/box-overlay";
-import { levelsFor, pantryLabel } from "@/lib/bins";
-import { useCamera } from "@/lib/client/camera";
+import { levelsFor } from "@/lib/bins";
+import { weight as kg } from "@/lib/format";
 import {
   imageSize,
   loadImage,
@@ -24,12 +24,13 @@ import {
   warmOcr,
   type Rect,
 } from "@/lib/client/scale-ocr";
+import { useDemoMode, useScaleUnit } from "@/lib/client/station";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
-import { demoControlsEnabled } from "@/lib/demo-controls";
 import type { OcrLine } from "@/lib/languages";
-import { pickFrame, SCALE_LCD } from "@/lib/scales";
-import type { BinEvent } from "@/lib/types";
-import { CleanerShell, NeedsPass, StepColumns } from "./cleaner-shell";
+import { toKg, type ScaleUnit } from "@/lib/scale-reading";
+import { pickFrame } from "@/lib/scales";
+import type { BinEvent, EventSource } from "@/lib/types";
+import { CleanerShell, LoadingPanel, NeedsPass, Panel } from "./cleaner-shell";
 
 type Phase =
   | "choose"
@@ -37,13 +38,19 @@ type Phase =
   | "locked"
   | "captured"
   | "ocr"
+  | "review"
+  | "manual"
+  | "saving"
   | "saved"
   | "rejected"
   | "failed"
-  | "swap";
+  | "no-sample";
 
-/** Where the photo comes from: a bundled sample photo, an uploaded photo, or the camera. */
-type Source = "sample" | "upload" | "camera";
+/**
+ * Where the photo of the scale comes from. A phone at the bin will send it later;
+ * until then a sample photo or an uploaded one stands in.
+ */
+type Source = "sample" | "upload";
 
 /** The photo being read. `crop` is the part sent to OCR, or null for the whole photo. */
 type Shot = {
@@ -51,6 +58,8 @@ type Shot = {
   crop: Rect | null;
   /** What a sample photo's display shows. Only used for the labelled fallback. */
   refKg: number | null;
+  /** Where a sample photo's display is, for the box drawn while it's found. */
+  lcd: Rect | null;
   /** Saved with the reading so the audit trail can link to it. Only sample photos have a URL. */
   photo: string | null;
   source: Source;
@@ -58,21 +67,41 @@ type Shot = {
 
 type Size = { width: number; height: number };
 
-const SOURCES: Array<[Source, string, LucideIcon]> = [
-  ["sample", "Sample photo", ImageIcon],
-  ["upload", "Upload photo", Upload],
-  ["camera", "Camera", Camera],
-];
+/** After a drop-off is saved, sign out sooner so the next cleaner starts fresh. */
+const SAVED_IDLE_MS = 30_000;
 
-/** Where to hold the scale display in the camera view. Centred, so mirroring the preview doesn't move it. */
-const DISPLAY_GUIDE: Rect = { x: 0.2, y: 0.25, w: 0.6, h: 0.5 };
-/** The sample photos' display, with a margin so the digits aren't cut off. */
-const SAMPLE_CROP = padRect(SCALE_LCD, 0.25);
+const SOURCE_TEXT: Record<EventSource, string> = {
+  ocr: "Read from the photo",
+  reference: "Sample photo's known reading",
+  manual: "Typed in by hand",
+  demo: "Demo reading",
+};
+
+/** A reading as the scale displayed it. `guessed` means the unit wasn't clear from the photo. */
+type Shown = { value: number; unit: ScaleUnit; guessed: boolean };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** A weight written in kg to the gram, the way the scale and the audit trail have it: "0.129 kg". */
+const kgText = (n: number) => `${Number(n.toFixed(3))} kg`;
+/** A weight in the scale's own unit: "850 g" or "4.20 kg". */
+const shownText = (value: number, unit: ScaleUnit) =>
+  unit === "g" ? `${value.toLocaleString("en", { maximumFractionDigits: 1 })} g` : kgText(value);
+/** A kg amount written in `unit`. */
+const inUnit = (kgValue: number, unit: ScaleUnit) =>
+  unit === "g" ? shownText(Math.round(kgValue * 1000), "g") : kgText(kgValue);
+
+/** Reads a typed weight in `unit`. Grams may use a thousands comma ("1,250"). */
+function parseTyped(text: string, unit: ScaleUnit): number | null {
+  let s = text.trim();
+  if (unit === "g" && /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, "");
+  else s = s.replace(",", ".");
+  return /^\d+(\.\d+)?$/.test(s) ? Number(s) : null;
+}
 
 export function WeighStation() {
   const params = useSearchParams();
+  const demo = useDemoMode();
+  const scaleUnit = useScaleUnit();
   const { data, loading, refresh } = useBootstrap();
   const cleaner = data.cleaners.find((c) => c.id === params.get("cleaner"));
   const bin = data.bins.find((b) => b.id === params.get("bin"));
@@ -80,16 +109,6 @@ export function WeighStation() {
   const validLevel =
     bin != null && Number.isInteger(level) && level >= 1 && level <= levelsFor(bin);
 
-  const {
-    videoRef: cameraRef,
-    status: cameraStatus,
-    error: cameraError,
-    mirrored: cameraMirrored,
-    start: startCamera,
-    stop: stopCamera,
-    capture: captureCamera,
-  } = useCamera();
-  const [source, setSource] = useState<Source>("sample");
   const [phase, setPhase] = useState<Phase>("choose");
   const [shot, setShot] = useState<Shot | null>(null);
   const [size, setSize] = useState<Size | null>(null);
@@ -99,219 +118,29 @@ export function WeighStation() {
   const [activeLine, setActiveLine] = useState<number | null>(null);
   const [beforeKg, setBeforeKg] = useState<number | null>(null);
   const [readKg, setReadKg] = useState<number | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
+  const [typed, setTyped] = useState("");
+  const [typedUnit, setTypedUnit] = useState<ScaleUnit>("kg");
   const [event, setEvent] = useState<BinEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ kg: number; from: EventSource } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [ocrMs, setOcrMs] = useState<number | null>(null);
+  const [swapping, setSwapping] = useState(false);
+  const [justSwapped, setJustSwapped] = useState(false);
   const runRef = useRef(0);
   const imageRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Wake the OCR service now, so it's likely ready by the time the photo is read.
+  // Leaving the page cancels any read in progress.
   useEffect(() => {
     warmOcr();
-    return () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    };
-  }, []);
-
-  /** Starts a new run and cancels any earlier one. Returns whether this run is still current. */
-  function newRun(): () => boolean {
-    const id = ++runRef.current;
-    return () => runRef.current === id;
-  }
-
-  function clearResult() {
-    setLines([]);
-    setOcrDone(false);
-    setWaking(false);
-    setActiveLine(null);
-    setReadKg(null);
-    setEvent(null);
-    setError(null);
-    setOcrMs(null);
-  }
-
-  function currentKg(): number {
-    return data.bins.find((b) => b.id === bin?.id)?.weightKg ?? 0;
-  }
-
-  async function postReading(
-    afterKg: number,
-    from: "ocr" | "reference",
-    photo: string | null,
-  ): Promise<boolean> {
-    if (!bin || !cleaner || !validLevel) return false;
-    const res = await fetch("/api/readings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ binId: bin.id, level, afterKg, source: from, cleanerId: cleaner.id, photo }),
-    });
-    const body = (await res.json().catch(() => ({}))) as { event?: BinEvent; error?: string };
-    if (res.status === 409) {
-      setReadKg(afterKg);
-      setPhase("rejected");
-      return false;
-    }
-    if (!res.ok || !body.event) throw new Error(body.error ?? `Save failed (${res.status}).`);
-    setEvent(body.event);
-    setPhase("saved");
-    void refresh();
-    return true;
-  }
-
-  /** Sends the photo to OCR, retrying while the service wakes up, then saves the weight it read. */
-  async function readShot(next: Shot, image: HTMLImageElement | HTMLCanvasElement, live: () => boolean) {
-    if (!bin) return;
-    setElapsed(0);
-    setPhase("ocr");
-    try {
-      const result = await readScaleWhenAwake(image, next.crop, {
-        isCurrent: live,
-        onWaking: () => setWaking(true),
-      });
-      if (!result) return;
-      setWaking(false);
-      setOcrMs(result.ms);
-      setLines(result.lines);
-      setOcrDone(true);
-      if (result.kg == null) {
-        throw new Error(
-          "OCR didn't find a weight on the scale display. Take the photo again with the display in view.",
-        );
-      }
-      if (result.kg > bin.capacityKg) {
-        throw new Error(
-          `OCR read ${result.kg} kg, more than the bin's ${bin.capacityKg} kg capacity. Take the photo again.`,
-        );
-      }
-      setReadKg(result.kg);
-      await postReading(result.kg, "ocr", next.photo);
-    } catch (err) {
-      if (!live()) return;
-      setWaking(false);
-      setError(err instanceof Error ? err.message : "OCR could not read this photo.");
-      setPhase("failed");
-    }
-  }
-
-  /** Reads a sample photo, picking one that shows more than the bin already holds. */
-  async function runSample(exclude?: string, forcedBefore?: number) {
-    if (!bin || !cleaner || !validLevel) return;
-    const live = newRun();
-    clearResult();
-    const before = forcedBefore ?? currentKg();
-    setBeforeKg(before);
-    const frame = pickFrame(before, exclude);
-    if (!frame) {
-      setShot(null);
-      setPhase("swap");
-      return;
-    }
-    const next: Shot = {
-      src: frame.src,
-      crop: SAMPLE_CROP,
-      refKg: frame.refKg,
-      photo: frame.src,
-      source: "sample",
-    };
-    setShot(next);
-    setPhase("aligning");
-    const [image] = await Promise.all([loadImage(frame.src).catch(() => null), sleep(1500)]);
-    if (!live()) return;
-    if (!image) {
-      setError("Couldn't load the sample photo.");
-      setPhase("failed");
-      return;
-    }
-    imageRef.current = image;
-    setSize(imageSize(image));
-    setPhase("locked");
-    await sleep(900);
-    if (!live()) return;
-    setPhase("captured");
-    await sleep(500);
-    if (!live()) return;
-    await readShot(next, image, live);
-  }
-
-  /** Reads an uploaded or camera photo. */
-  async function runPhoto(image: HTMLImageElement | HTMLCanvasElement, next: Shot) {
-    const live = newRun();
-    clearResult();
-    imageRef.current = image;
-    setShot(next);
-    setSize(imageSize(image));
-    setPhase("captured");
-    await sleep(500);
-    if (!live()) return;
-    await readShot(next, image, live);
-  }
-
-  function retryOcr() {
-    if (!shot || !imageRef.current) return;
-    const live = newRun();
-    clearResult();
-    void readShot(shot, imageRef.current, live);
-  }
-
-  /** Switches photo source and waits for the cleaner to start the read. */
-  function chooseSource(next: Source, before = currentKg()) {
-    if (!bin) return;
-    runRef.current++;
-    stopCamera();
-    clearResult();
-    setSource(next);
-    setShot(null);
-    setBeforeKg(before);
-    if (before >= bin.capacityKg) {
-      setPhase("swap");
-      return;
-    }
-    setPhase("choose");
-    if (next === "camera") void startCamera();
-  }
-
-  async function onUpload(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Choose a photo: JPEG, PNG or WebP.");
-      return;
-    }
-    setError(null);
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    const url = URL.createObjectURL(file);
-    objectUrlRef.current = url;
-    try {
-      const image = await loadImage(url);
-      void runPhoto(image, { src: url, crop: null, refKg: null, photo: null, source: "upload" });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't open this photo.");
-    }
-  }
-
-  function onCapture() {
-    const frame = captureCamera();
-    if (!frame) return;
-    void runPhoto(frame, {
-      src: frame.toDataURL("image/jpeg", 0.85),
-      crop: DISPLAY_GUIDE,
-      refKg: null,
-      photo: null,
-      source: "camera",
-    });
-  }
-
-  // The page opens on the sample source and reads nothing until the cleaner starts a read,
-  // so no reading is saved by surprise. Cancel any read in progress when leaving the page.
-  useEffect(() => {
     const runs = runRef;
     return () => {
       runs.current++;
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     };
   }, []);
 
@@ -325,9 +154,7 @@ export function WeighStation() {
   if (loading) {
     return (
       <CleanerShell step={3}>
-        <p className="rounded-md border border-black/10 bg-white p-5 text-[13px] text-smu-muted shadow-card">
-          Loading weigh station…
-        </p>
+        <LoadingPanel label="Loading the weigh step…" />
       </CleanerShell>
     );
   }
@@ -336,15 +163,17 @@ export function WeighStation() {
     return (
       <CleanerShell step={3} cleaner={cleaner}>
         {cleaner ? (
-          <div className="rounded-md border border-black/10 bg-white p-5 text-[14px] shadow-card">
-            <p className="font-semibold text-smu-navy">Pick a building and pantry first</p>
+          <Panel className="max-w-xl p-6">
+            <h1 className="font-display text-[30px] leading-9 text-smu-navy">
+              Choose a pantry first
+            </h1>
             <Link
               href={`/cleaner/building?cleaner=${cleaner.id}`}
-              className="mt-2 inline-block text-smu-gold underline underline-offset-2"
+              className="btn-smu btn-smu-gold mt-5"
             >
-              Back to pantry picker
+              Choose pantry
             </Link>
-          </div>
+          </Panel>
         ) : (
           <NeedsPass />
         )}
@@ -352,55 +181,720 @@ export function WeighStation() {
     );
   }
 
-  const pantry = pantryLabel(bin, level);
+  const binKg = bin.weightKg;
+  const before = beforeKg ?? binKg;
+  const full = binKg >= bin.capacityKg;
+  const busy = phase === "aligning" || phase === "locked" || phase === "captured" || phase === "ocr";
+  const pickHref = `/cleaner/building?cleaner=${cleaner.id}`;
 
-  async function applyReference() {
-    if (shot?.refKg == null) return;
+  /** Starts a new run and cancels any earlier one. Returns whether this run is still current. */
+  function newRun(): () => boolean {
+    const id = ++runRef.current;
+    return () => runRef.current === id;
+  }
+
+  function clearResult() {
+    setLines([]);
+    setOcrDone(false);
+    setWaking(false);
+    setActiveLine(null);
+    setRead(null);
+    setEvent(null);
+    setError(null);
+    setPending(null);
+    setOcrMs(null);
+    setJustSwapped(false);
+  }
+
+  /** Sets the reading in kg, and how the scale showed it (kg, unless given). */
+  function setRead(kgValue: number | null, how?: Shown) {
+    setReadKg(kgValue);
+    setShown(kgValue == null ? null : (how ?? { value: kgValue, unit: "kg", guessed: false }));
+  }
+
+  function backToStart() {
+    runRef.current++;
+    clearResult();
+    setShot(null);
+    setBeforeKg(null);
+    setPhase("choose");
+  }
+
+  async function save(afterKg: number, from: EventSource) {
+    if (!bin || !cleaner) return;
+    setPhase("saving");
+    setError(null);
+    setPending({ kg: afterKg, from });
     try {
-      setReadKg(shot.refKg);
-      await postReading(shot.refKg, "reference", shot.photo);
+      const res = await fetch("/api/readings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          binId: bin.id,
+          level,
+          afterKg,
+          source: from,
+          cleanerId: cleaner.id,
+          photo: shot?.photo ?? null,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { event?: BinEvent; error?: string };
+      if (res.status === 409) {
+        setPending(null);
+        setReadKg(afterKg);
+        setPhase("rejected");
+        return;
+      }
+      if (!res.ok || !body.event) throw new Error(body.error ?? `Saving failed (${res.status}).`);
+      setEvent(body.event);
+      setPhase("saved");
+      void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed.");
+      setError(
+        err instanceof Error
+          ? `${err.message} Nothing was saved.`
+          : "Couldn't save the reading. Nothing was saved.",
+      );
       setPhase("failed");
     }
   }
 
+  /** Sends the photo to OCR, retrying while the service wakes up, then asks the cleaner to check it. */
+  async function readShot(
+    next: Shot,
+    image: HTMLImageElement | HTMLCanvasElement,
+    startKg: number,
+    live: () => boolean,
+  ) {
+    if (!bin) return;
+    setElapsed(0);
+    setPhase("ocr");
+    try {
+      const result = await readScaleWhenAwake(image, next.crop, {
+        isCurrent: live,
+        onWaking: () => setWaking(true),
+        // Sample photos are of the prototype's scale, whose LCD unit OCR can't see: digits are grams.
+        unit: next.source === "sample" ? "g" : scaleUnit,
+        capacityKg: bin.capacityKg,
+      });
+      if (!result) return;
+      setWaking(false);
+      setOcrMs(result.ms);
+      setLines(result.lines);
+      setOcrDone(true);
+      const reading = result.reading;
+      if (!reading) {
+        throw new Error(
+          "No weight was found on the scale display. Retake the photo with the display in view, or type the weight.",
+        );
+      }
+      if (reading.kg > bin.capacityKg) {
+        throw new Error(
+          `The photo seems to show ${shownText(reading.value, reading.unit)}, more than the bin's ${bin.capacityKg} kg. Retake the photo, or type the weight.`,
+        );
+      }
+      setRead(reading.kg, {
+        value: reading.value,
+        unit: reading.unit,
+        guessed: reading.unitFrom === "guess",
+      });
+      setPhase(reading.kg > startKg ? "review" : "rejected");
+    } catch (err) {
+      if (!live()) return;
+      setWaking(false);
+      setError(err instanceof Error ? err.message : "The photo couldn't be read.");
+      setPhase("failed");
+    }
+  }
+
+  /** Reads a sample photo, picking one that shows more than the bin already holds. */
+  async function runSample(exclude?: string) {
+    const live = newRun();
+    clearResult();
+    setBeforeKg(binKg);
+    const frame = pickFrame(binKg, exclude);
+    if (!frame) {
+      setShot(null);
+      setPhase("no-sample");
+      return;
+    }
+    const next: Shot = {
+      src: frame.src,
+      // A margin around the display so the digits aren't cut off.
+      crop: padRect(frame.lcd, 0.25),
+      refKg: frame.refKg,
+      lcd: frame.lcd,
+      photo: frame.src,
+      source: "sample",
+    };
+    setShot(next);
+    setPhase("aligning");
+    const [image] = await Promise.all([loadImage(frame.src).catch(() => null), sleep(1200)]);
+    if (!live()) return;
+    if (!image) {
+      setError("The sample photo didn't load. Check the connection and try again.");
+      setPhase("failed");
+      return;
+    }
+    imageRef.current = image;
+    setSize(imageSize(image));
+    setPhase("locked");
+    await sleep(700);
+    if (!live()) return;
+    setPhase("captured");
+    await sleep(400);
+    if (!live()) return;
+    await readShot(next, image, binKg, live);
+  }
+
+  async function onUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("That file isn't a photo. Choose a JPEG, PNG or WebP.");
+      setPhase("failed");
+      return;
+    }
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const url = URL.createObjectURL(file);
+    objectUrlRef.current = url;
+    const live = newRun();
+    clearResult();
+    setBeforeKg(binKg);
+    try {
+      const image = await loadImage(url);
+      if (!live()) return;
+      const next: Shot = { src: url, crop: null, refKg: null, lcd: null, photo: null, source: "upload" };
+      imageRef.current = image;
+      setShot(next);
+      setSize(imageSize(image));
+      setPhase("captured");
+      await sleep(400);
+      if (!live()) return;
+      await readShot(next, image, binKg, live);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That photo couldn't be opened.");
+      setPhase("failed");
+    }
+  }
+
+  function chooseUpload() {
+    fileRef.current?.click();
+  }
+
+  function retake() {
+    if (shot?.source === "sample") {
+      void runSample(shot.src);
+    } else {
+      backToStart();
+      chooseUpload();
+    }
+  }
+
+  function retryRead() {
+    if (!shot || !imageRef.current) return;
+    const live = newRun();
+    clearResult();
+    void readShot(shot, imageRef.current, before, live);
+  }
+
+  function typeInstead() {
+    runRef.current++;
+    setWaking(false);
+    setError(null);
+    setBeforeKg(before);
+    const unit = shown?.unit ?? scaleUnit;
+    setTypedUnit(unit);
+    setTyped(shown ? String(shown.value) : "");
+    setPhase("manual");
+  }
+
   async function swapBin() {
     if (!bin || !cleaner) return;
+    setSwapping(true);
     try {
       await apiRequest("/api/collect", {
         method: "POST",
         body: JSON.stringify({ binId: bin.id, cleanerId: cleaner.id }),
       });
-      void refresh();
     } catch {
-      // Already empty — weigh the fresh bin anyway.
+      // Already empty: weigh it anyway.
     }
-    chooseSource(source, 0);
+    await refresh();
+    setSwapping(false);
+    backToStart();
+    setJustSwapped(true);
   }
 
-  const showCamera = source === "camera" && phase === "choose";
-  const busy = phase === "aligning" || phase === "locked" || phase === "captured" || phase === "ocr";
-  const inSetup = phase === "choose" || phase === "swap";
-  const photoStatus =
-    phase === "aligning"
-      ? "finding display…"
-      : phase === "locked"
-        ? "steady…"
-        : shot && !inSetup
-          ? shot.source === "sample"
-            ? "sample photo"
-            : shot.source === "upload"
-              ? "uploaded"
-              : "captured"
-          : null;
-  const steps: Array<[string, string | null, boolean]> = [
-    ["Photo", photoStatus, photoStatus != null && phase !== "aligning" && phase !== "locked"],
-    [
-      "Upload",
-      phase === "ocr" ? (waking ? "waiting for OCR service…" : "sending…") : ocrDone ? "sent" : null,
-      ocrDone,
-    ],
+  // ----- What the right-hand panel shows for each phase -----
+
+  const typedValue = parseTyped(typed, typedUnit);
+  const typedKg = typedValue == null ? Number.NaN : toKg(typedValue, typedUnit);
+  const typedValid = typedValue != null && typedKg > before && typedKg <= bin.capacityKg;
+  const typedProblem =
+    typed.trim() === "" || typedValid
+      ? null
+      : typedValue == null
+        ? `Type the number on the display, like ${typedUnit === "g" ? "850" : "0.850"}.`
+        : typedKg > bin.capacityKg
+          ? `That's more than the bin holds (${inUnit(bin.capacityKg, typedUnit)}).`
+          : `That isn't more than the ${inUnit(before, typedUnit)} already in the bin.`;
+
+  function submitTyped(e: FormEvent) {
+    e.preventDefault();
+    if (!typedValid || typedValue == null) return;
+    setRead(typedKg, { value: typedValue, unit: typedUnit, guessed: false });
+    void save(typedKg, "manual");
+  }
+
+  const typeButton = (
+    <button type="button" onClick={typeInstead} className="cleaner-link">
+      <Keyboard className="h-5 w-5" /> Type the weight instead
+    </button>
+  );
+
+  let panel: ReactNode;
+  if (phase === "choose" && full) {
+    panel = (
+      <>
+        <PanelTitle>The {bin.short} bin is full</PanelTitle>
+        <p className="cleaner-body">
+          It holds {kg(bin.weightKg)} of {kg(bin.capacityKg)}. Swap in an empty bin, then weigh the
+          new grounds.
+        </p>
+        <button
+          type="button"
+          onClick={() => void swapBin()}
+          disabled={swapping}
+          className="btn-smu btn-smu-gold cleaner-action"
+        >
+          <Truck className="h-5 w-5" /> {swapping ? "Logging swap…" : "I've swapped in an empty bin"}
+        </button>
+      </>
+    );
+  } else if (phase === "choose") {
+    panel = (
+      <>
+        <PanelTitle>Photograph the scale display</PanelTitle>
+        {justSwapped && <SwapReminder />}
+        <p className="cleaner-body">
+          Put the bin on the scale, then send a photo of the display. You&apos;ll check the number
+          before it&apos;s saved.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => void runSample()}
+            className="btn-smu btn-smu-gold cleaner-action"
+          >
+            <ImageIcon className="h-5 w-5" /> Use a sample photo
+          </button>
+          <button type="button" onClick={chooseUpload} className="btn-smu btn-smu-outline cleaner-action">
+            <Upload className="h-5 w-5" /> Upload a photo
+          </button>
+        </div>
+        {typeButton}
+      </>
+    );
+  } else if (busy) {
+    panel = (
+      <>
+        <PanelTitle>Reading the scale…</PanelTitle>
+        <p className="flex items-center gap-3 text-[17px] text-black/80" role="status">
+          <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-smu-gold" />
+          {phase === "ocr"
+            ? waking
+              ? `The reader is starting up · ${elapsed}s`
+              : `Reading the display · ${elapsed}s`
+            : "Finding the display in the photo"}
+        </p>
+        {waking && (
+          <p className="cleaner-body">
+            The first reading of the day can take up to a minute. You can type the weight instead.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          {typeButton}
+          <button type="button" onClick={backToStart} className="cleaner-link text-black/70">
+            Cancel
+          </button>
+        </div>
+      </>
+    );
+  } else if (phase === "review" && readKg != null && shown) {
+    panel = (
+      <>
+        <PanelTitle>Is this what the scale shows?</PanelTitle>
+        <div className="fade-up">
+          <p className="font-display text-[84px] leading-[84px] tabular-nums text-smu-navy">
+            {shown.unit === "g"
+              ? shown.value.toLocaleString("en", { maximumFractionDigits: 1 })
+              : Number(shown.value.toFixed(3))}
+            <span className="ml-2 text-[36px] text-black/60">{shown.unit}</span>
+          </p>
+          {shown.unit === "g" && (
+            <p className="mt-2 text-[16px] text-black/70">Saved as {kgText(readKg)}</p>
+          )}
+          {shown.guessed && (
+            <p className="mt-3 rounded border border-smu-warning/40 bg-smu-warning/10 px-3 py-2 text-[15px] leading-6 text-black/80">
+              The unit wasn&apos;t clear, so this was read as{" "}
+              {shown.unit === "g" ? "grams" : "kilograms"}. Check it matches the display.
+            </p>
+          )}
+        </div>
+        <Sum before={before} after={readKg} level={level} />
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            autoFocus
+            onClick={() => void save(readKg, "ocr")}
+            className="btn-smu btn-smu-gold cleaner-action"
+          >
+            <CheckCircle2 className="h-5 w-5" /> Yes, save {shownText(shown.value, shown.unit)}
+          </button>
+          <button type="button" onClick={retake} className="btn-smu btn-smu-outline cleaner-action">
+            <RefreshCw className="h-5 w-5" /> No, retake the photo
+          </button>
+        </div>
+        {typeButton}
+      </>
+    );
+  } else if (phase === "manual") {
+    panel = (
+      <form onSubmit={submitTyped} className="flex flex-col gap-5">
+        <PanelTitle>Type the weight on the scale</PanelTitle>
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="typed-kg" className="block text-[16px] font-semibold text-smu-navy">
+              Number on the display
+            </label>
+            <div role="group" aria-label="Unit on the display" className="flex rounded border border-black/15 p-0.5">
+              {(["kg", "g"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  aria-pressed={typedUnit === u}
+                  onClick={() => setTypedUnit(u)}
+                  className={`h-9 min-w-12 rounded-sm px-3 text-[15px] font-semibold transition-colors ${
+                    typedUnit === u ? "bg-smu-navy text-white" : "text-black/70 hover:bg-smu-cream"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="relative mt-2">
+            <input
+              id="typed-kg"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder={typedUnit === "g" ? "0" : "0.000"}
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              aria-invalid={typedProblem ? true : undefined}
+              aria-describedby="typed-kg-hint"
+              className="h-20 w-full rounded border border-black/20 bg-white px-4 pr-16 font-display text-[44px] tabular-nums text-smu-navy placeholder:text-black/55 focus:border-smu-gold focus:outline-none focus:ring-2 focus:ring-smu-gold/30"
+            />
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[22px] text-black/60">
+              {typedUnit}
+            </span>
+          </div>
+          <p id="typed-kg-hint" className="mt-2 text-[15px] leading-6 text-black/70">
+            The scale shows the whole bin, including the {inUnit(before, typedUnit)} already in
+            it.
+          </p>
+          {typedProblem && (
+            <p className="mt-2 text-[15px] font-semibold text-[#a52a25]" role="alert">
+              {typedProblem}
+            </p>
+          )}
+        </div>
+        {typedValid && <Sum before={before} after={typedKg} level={level} />}
+        <div className="flex flex-col gap-3">
+          <button
+            type="submit"
+            disabled={!typedValid}
+            className="btn-smu btn-smu-gold cleaner-action disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <CheckCircle2 className="h-5 w-5" />{" "}
+            {typedValid && typedValue != null ? `Save ${shownText(typedValue, typedUnit)}` : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={shot && readKg != null ? () => setPhase("review") : backToStart}
+            className="btn-smu btn-smu-outline cleaner-action"
+          >
+            Back to the photo
+          </button>
+        </div>
+      </form>
+    );
+  } else if (phase === "saving") {
+    panel = (
+      <>
+        <PanelTitle>Saving…</PanelTitle>
+        <p className="cleaner-body" role="status">
+          Logging {shown ? shownText(shown.value, shown.unit) : pending ? kg(pending.kg) : "the reading"}{" "}
+          for the Level {level} pantry.
+        </p>
+      </>
+    );
+  } else if (phase === "saved" && event) {
+    panel = (
+      <>
+        <div className="fade-up flex items-center gap-4">
+          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-smu-success text-white">
+            <CheckCircle2 className="h-8 w-8" />
+          </span>
+          <PanelTitle>Drop-off logged</PanelTitle>
+        </div>
+        <p className="font-display text-[56px] leading-[60px] tabular-nums text-[#287a28]">
+          +{kg(event.kg)}
+        </p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-[16px]">
+          <dt className="text-black/65">From</dt>
+          <dd className="text-right font-semibold">
+            {bin.short} · Level {level} pantry
+          </dd>
+          <dt className="text-black/65">Bin now</dt>
+          <dd className="text-right font-semibold tabular-nums">
+            {kg(event.afterKg ?? 0)} of {bin.capacityKg} kg
+          </dd>
+          <dt className="text-black/65">How</dt>
+          <dd className="text-right">
+            {SOURCE_TEXT[event.source ?? "ocr"]}
+            {shown?.unit === "g" && ` · scale showed ${shownText(shown.value, "g")}`}
+          </dd>
+          <dt className="text-black/65">By</dt>
+          <dd className="text-right">
+            {cleaner.name} at{" "}
+            <span suppressHydrationWarning>
+              {new Date(event.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </span>
+          </dd>
+        </dl>
+        <div className="flex flex-col gap-3">
+          <Link href={pickHref} autoFocus className="btn-smu btn-smu-gold cleaner-action">
+            Log another level
+          </Link>
+          <Link href="/cleaner" className="btn-smu btn-smu-outline cleaner-action">
+            Done, sign out
+          </Link>
+        </div>
+        <Link href={`/dashboard?bin=${bin.id}`} target="_blank" className="text-link text-[15px]">
+          See it on the dashboard
+        </Link>
+      </>
+    );
+  } else if (phase === "rejected") {
+    panel = (
+      <>
+        <PanelTitle>
+          {readKg === 0 ? "The scale shows nothing" : "That reading looks too low"}
+        </PanelTitle>
+        {readKg === 0 ? (
+          <p className="cleaner-body">
+            The photo shows {shown ? shownText(shown.value, shown.unit) : "0"} on the display. Was the
+            bin on the scale when the photo was taken?
+          </p>
+        ) : (
+          <p className="cleaner-body">
+            The scale shows{" "}
+            {shown
+              ? `${shownText(shown.value, shown.unit)}${shown.unit === "g" ? ` (${kgText(readKg ?? 0)})` : ""}`
+              : "no change"}
+            , but the bin already held {inUnit(before, shown?.unit ?? "kg")}. The photo may have been
+            taken before the grounds went in.
+          </p>
+        )}
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={retake} className="btn-smu btn-smu-gold cleaner-action">
+            <RefreshCw className="h-5 w-5" /> Retake the photo
+          </button>
+        </div>
+        {typeButton}
+      </>
+    );
+  } else if (phase === "no-sample") {
+    panel = (
+      <>
+        <PanelTitle>No sample photo fits this bin</PanelTitle>
+        <p className="cleaner-body">
+          The bin already holds {kg(before)}, more than any sample photo shows. Upload a photo,
+          type the weight, or swap in an empty bin.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={chooseUpload} className="btn-smu btn-smu-gold cleaner-action">
+            <Upload className="h-5 w-5" /> Upload a photo
+          </button>
+          <button
+            type="button"
+            onClick={() => void swapBin()}
+            disabled={swapping}
+            className="btn-smu btn-smu-outline cleaner-action"
+          >
+            <Truck className="h-5 w-5" /> {swapping ? "Logging swap…" : "I've swapped in an empty bin"}
+          </button>
+        </div>
+        {typeButton}
+      </>
+    );
+  } else {
+    // failed
+    panel = (
+      <>
+        <PanelTitle>{pending ? "The reading wasn't saved" : "Couldn't read the scale"}</PanelTitle>
+        <p className="cleaner-body" role="alert">
+          {error}
+        </p>
+        <div className="flex flex-col gap-3">
+          {pending ? (
+            <button
+              type="button"
+              onClick={() => void save(pending.kg, pending.from)}
+              className="btn-smu btn-smu-gold cleaner-action"
+            >
+              <RefreshCw className="h-5 w-5" /> Try saving again
+            </button>
+          ) : (
+            <>
+              {shot && (
+                <button type="button" onClick={retryRead} className="btn-smu btn-smu-gold cleaner-action">
+                  <ScanText className="h-5 w-5" /> Read this photo again
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={retake}
+                className={`btn-smu cleaner-action ${shot ? "btn-smu-outline" : "btn-smu-gold"}`}
+              >
+                <RefreshCw className="h-5 w-5" /> {shot ? "Retake the photo" : "Choose another photo"}
+              </button>
+              {shot?.refKg != null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRead(shot.refKg);
+                    void save(shot.refKg as number, "reference");
+                  }}
+                  className="cleaner-link"
+                  title="Logged as the sample's known reading, flagged in the audit trail"
+                >
+                  Use the sample&apos;s known reading ({kg(shot.refKg)})
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        {!pending && typeButton}
+      </>
+    );
+  }
+
+  // ----- Photo stage -----
+
+  const showPhoto = shot != null && phase !== "choose" && phase !== "no-sample";
+  const typedByHand = phase === "manual" || pending?.from === "manual";
+  const inset =
+    showPhoto && shot?.crop && size && (phase === "ocr" || phase === "review" || phase === "saved")
+      ? shot.crop
+      : null;
+
+  const stage = showPhoto ? (
+    <div
+      className="relative mx-auto w-full"
+      style={size ? { maxWidth: `calc(64vh * ${size.width / size.height})` } : undefined}
+    >
+      {lines.length > 0 ? (
+        <BoxOverlay
+          src={shot.src}
+          lines={lines}
+          size={size}
+          activeIndex={activeLine}
+          onActiveChange={setActiveLine}
+          onLoad={setSize}
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={shot.src}
+          alt={shot.source === "sample" ? "Sample photo of the scale" : "Photo of the scale"}
+          className={`block h-auto w-full transition-[filter,transform] duration-[1200ms] ease-out ${
+            phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
+          }`}
+        />
+      )}
+
+      {(phase === "aligning" || phase === "locked") && shot.lcd && (
+        <span
+          className={`pointer-events-none absolute rounded border-[3px] transition-colors ${
+            phase === "locked" ? "border-smu-success" : "animate-pulse border-smu-gold"
+          }`}
+          style={{
+            left: `${shot.lcd.x * 100}%`,
+            top: `${shot.lcd.y * 100}%`,
+            width: `${shot.lcd.w * 100}%`,
+            height: `${shot.lcd.h * 100}%`,
+          }}
+        />
+      )}
+
+      {inset && size && (
+        <div className="absolute right-3 top-3 w-[38%]">
+          <div
+            aria-hidden
+            className="overflow-hidden rounded border-2 border-white shadow-[0_8px_24px_-8px_rgb(0_0_0/0.6)]"
+            style={{
+              aspectRatio: `${(inset.w * size.width) / (inset.h * size.height)}`,
+              backgroundImage: `url("${shot.src}")`,
+              backgroundSize: `${100 / inset.w}% auto`,
+              backgroundPosition: `${inset.w < 1 ? (inset.x / (1 - inset.w)) * 100 : 0}% ${
+                inset.h < 1 ? (inset.y / (1 - inset.h)) * 100 : 0
+              }%`,
+            }}
+          />
+          <p className="mt-1 text-right text-[13px] font-semibold text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]">
+            The display, close up
+          </p>
+        </div>
+      )}
+
+      {phase === "captured" && <span className="shutter pointer-events-none absolute inset-0 bg-white" />}
+    </div>
+  ) : (
+    <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 p-8 text-center text-white">
+      {typedByHand ? (
+        <Keyboard className="h-14 w-14 text-white/40" />
+      ) : full && phase === "choose" ? (
+        <Truck className="h-14 w-14 text-white/40" />
+      ) : (
+        <Smartphone className="h-14 w-14 text-white/40" />
+      )}
+      <p className="font-display text-[28px] leading-9">
+        {typedByHand
+          ? "Weight typed by hand"
+          : full && phase === "choose"
+            ? "Swap the bin first"
+            : "Waiting for a photo of the scale"}
+      </p>
+      {!typedByHand && !(full && phase === "choose") && (
+        <p className="max-w-md text-[16px] leading-6 text-white/70">
+          The phone at this bin will send it here. Until that&apos;s set up, use a sample photo or
+          upload one.
+        </p>
+      )}
+    </div>
+  );
+
+  // ----- Demo-only details for assessors -----
+
+  const pipeline: Array<[string, string | null, boolean]> = [
+    ["Photo", shot ? (shot.source === "sample" ? "sample photo" : "uploaded") : null, shot != null && !busy],
     [
       "OCR",
       phase === "ocr"
@@ -409,465 +903,149 @@ export function WeighStation() {
           : `reading… ${elapsed}s`
         : ocrDone
           ? lines.length
-            ? lines.map((l) => `“${l.text}”`).join(" ")
+            ? `${lines.map((l) => `“${l.text}”`).join(" ")}${ocrMs ? ` in ${(ocrMs / 1000).toFixed(1)}s` : ""}`
             : "no text found"
           : null,
       ocrDone && lines.length > 0,
     ],
-    ["Weight", readKg != null ? `${readKg.toFixed(2)} kg total` : null, readKg != null],
+    [
+      "Weight",
+      readKg != null && shown
+        ? `${shownText(shown.value, shown.unit)}${shown.unit === "g" ? ` → ${kgText(readKg)}` : ""} total${
+            shown.guessed ? " (unit guessed)" : ""
+          }`
+        : null,
+      readKg != null,
+    ],
+    ["Confirmed", phase === "saved" ? "by cleaner" : null, phase === "saved"],
     ["Dashboard", phase === "saved" ? "updated" : null, phase === "saved"],
   ];
-  const ocrMessage = waking
-    ? `OCR service is starting, retrying… ${elapsed}s`
-    : `Reading the scale display with OCR… ${elapsed}s`;
-  const inset =
-    shot?.crop && size && (phase === "captured" || phase === "ocr" || phase === "saved")
-      ? shot.crop
-      : null;
 
   return (
-    <CleanerShell step={3} cleaner={cleaner}>
-      <StepColumns
-        main={
-          <>
-            <div className="flex items-baseline justify-between gap-2">
-              <div>
-                <h1 className="font-display text-[30px] leading-9 text-smu-navy">
-                  Weigh the {bin.short} central bin
-                </h1>
-                <p className="text-[13px] text-smu-muted">
-                  Grounds from <span className="font-medium text-black">{pantry}</span> pantry
-                </p>
-              </div>
-              <Link
-                href={`/cleaner/building?cleaner=${cleaner.id}`}
-                className="shrink-0 text-[12px] text-smu-muted underline underline-offset-2"
-              >
-                Change
-              </Link>
-            </div>
+    <CleanerShell
+      step={3}
+      cleaner={cleaner}
+      where={`${bin.short} central bin`}
+      idleMs={phase === "saved" ? SAVED_IDLE_MS : undefined}
+      pauseIdle={busy || phase === "saving"}
+    >
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div>
+          <h1 className="font-display text-[36px] leading-[44px] text-smu-navy lg:text-[42px] lg:leading-[50px]">
+            Weigh the {bin.short} bin
+          </h1>
+          <p className="mt-1 text-[17px] text-black/75">
+            Grounds from the <span className="font-semibold text-black">Level {level}</span> pantry
+            <span aria-hidden> · </span>
+            <span className="tabular-nums">bin held {kg(before)}</span>
+            {scaleUnit === "g" && (
+              <>
+                <span aria-hidden> · </span>scale shows grams
+              </>
+            )}
+          </p>
+        </div>
+        {phase !== "saved" && phase !== "saving" && (
+          <Link href={pickHref} className="cleaner-link">
+            Change level
+          </Link>
+        )}
+      </div>
 
-            <div
-              role="group"
-              aria-label="Photo of the scale"
-              className="grid grid-cols-3 gap-1 rounded-md border border-black/10 bg-white p-1"
-            >
-              {SOURCES.map(([value, label, Icon]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={source === value}
-                  disabled={phase === "ocr" || phase === "saved"}
-                  onClick={() => {
-                    if (source !== value) chooseSource(value);
-                  }}
-                  className={`flex items-center justify-center gap-1.5 rounded px-2 py-2 text-[12.5px] font-semibold transition-colors disabled:opacity-50 ${
-                    source === value
-                      ? "bg-smu-navy text-white"
-                      : "text-smu-muted hover:bg-smu-cream hover:text-smu-navy"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" /> {label}
-                </button>
-              ))}
-            </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,1fr)] lg:gap-8">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="overflow-hidden rounded-md bg-smu-navy-deep">{stage}</div>
 
-            <section className="overflow-hidden rounded-md border border-black/10 bg-white shadow-card">
-              <div className="relative overflow-hidden bg-smu-navy-deep">
-                <video
-                  ref={cameraRef}
-                  playsInline
-                  muted
-                  className={`block h-auto w-full ${cameraMirrored ? "-scale-x-100" : ""} ${
-                    showCamera && cameraStatus === "live" ? "" : "hidden"
-                  }`}
-                />
-
-                {showCamera && cameraStatus === "live" && (
-                  <>
-                    <span
-                      className="pointer-events-none absolute rounded border-2 border-smu-gold shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
-                      style={{
-                        left: `${DISPLAY_GUIDE.x * 100}%`,
-                        top: `${DISPLAY_GUIDE.y * 100}%`,
-                        width: `${DISPLAY_GUIDE.w * 100}%`,
-                        height: `${DISPLAY_GUIDE.h * 100}%`,
-                      }}
-                    />
-                    <span className="absolute inset-x-0 top-2 text-center text-[11px] font-medium text-white drop-shadow">
-                      Fit the scale&apos;s display inside the box
-                    </span>
-                  </>
-                )}
-
-                {showCamera && cameraStatus !== "live" && (
-                  <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 p-6 text-center">
-                    <Camera className="h-10 w-10 text-white/30" />
-                    {cameraStatus === "starting" ? (
-                      <p className="text-[13px] text-white/60">Starting camera…</p>
-                    ) : (
-                      <>
-                        {cameraError && (
-                          <p className="max-w-sm text-[13px] text-white/80">{cameraError}</p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void startCamera()}
-                          className="btn-smu btn-smu-gold"
-                        >
-                          <Camera className="h-4 w-4" /> Open camera
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {source === "sample" && phase === "choose" && (
-                  <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 p-6 text-center">
-                    <ImageIcon className="h-10 w-10 text-white/30" />
-                    <p className="max-w-sm text-[13px] text-white/70">
-                      Read one of the sample overhead photos of the floor scale.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void runSample()}
-                      className="btn-smu btn-smu-gold"
-                    >
-                      <ScanText className="h-4 w-4" /> Read sample photo
-                    </button>
-                  </div>
-                )}
-
-                {source === "upload" && phase === "choose" && (
-                  <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 p-6 text-center">
-                    <Upload className="h-10 w-10 text-white/30" />
-                    <p className="max-w-sm text-[13px] text-white/70">
-                      Upload a clear photo of the scale with its display in view.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      className="btn-smu btn-smu-gold"
-                    >
-                      <Upload className="h-4 w-4" /> Choose photo
-                    </button>
-                    {error && <p className="max-w-sm text-[13px] text-[#ffb4a8]">{error}</p>}
-                  </div>
-                )}
-
-                {!inSetup &&
-                  shot &&
-                  (lines.length > 0 ? (
-                    <BoxOverlay
-                      src={shot.src}
-                      lines={lines}
-                      size={size}
-                      activeIndex={activeLine}
-                      onActiveChange={setActiveLine}
-                      onLoad={setSize}
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={shot.src}
-                      alt={
-                        shot.source === "sample"
-                          ? "Sample overhead photo of the floor scale"
-                          : "Photo of the scale"
-                      }
-                      className={`block h-auto w-full transition-[filter,transform] duration-[1400ms] ease-out ${
-                        phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
-                      }`}
-                    />
-                  ))}
-
-                {!inSetup && !shot && (
-                  <div className="grid aspect-video place-items-center text-[13px] text-white/55">
-                    Loading photo…
-                  </div>
-                )}
-
-                {phase === "swap" && (
-                  <div className="grid aspect-video place-items-center text-[13px] text-white/55">
-                    Weighing paused · bin needs swapping
-                  </div>
-                )}
-
-                {(phase === "aligning" || phase === "locked") && shot && (
-                  <>
-                    <span
-                      className={`pointer-events-none absolute rounded border-2 transition-colors ${
-                        phase === "locked" ? "border-smu-success" : "animate-pulse border-smu-gold"
-                      }`}
-                      style={{
-                        left: `${SCALE_LCD.x * 100}%`,
-                        top: `${SCALE_LCD.y * 100}%`,
-                        width: `${SCALE_LCD.w * 100}%`,
-                        height: `${SCALE_LCD.h * 100}%`,
-                      }}
-                    />
-                    <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10.5px] font-medium text-white">
-                      Sample overhead photo
-                    </span>
-                    <span className="absolute inset-x-0 bottom-2 text-center text-[11px] font-medium text-white drop-shadow">
-                      {phase === "aligning" ? "Finding the scale display…" : "Display found · capturing"}
-                    </span>
-                  </>
-                )}
-
-                {inset && shot && size && (
-                  <div
-                    aria-hidden
-                    className="absolute right-2 top-2 w-[34%] overflow-hidden rounded border-2 border-white shadow-lg"
-                    style={{
-                      aspectRatio: `${(inset.w * size.width) / (inset.h * size.height)}`,
-                      backgroundImage: `url("${shot.src}")`,
-                      backgroundSize: `${100 / inset.w}% auto`,
-                      backgroundPosition: `${inset.w < 1 ? (inset.x / (1 - inset.w)) * 100 : 0}% ${
-                        inset.h < 1 ? (inset.y / (1 - inset.h)) * 100 : 0
-                      }%`,
-                    }}
-                  />
-                )}
-
-                {phase === "captured" && (
-                  <span className="shutter pointer-events-none absolute inset-0 bg-white" />
-                )}
-                {phase === "ocr" && (
-                  <span className="absolute inset-x-0 bottom-2 text-center text-[11px] font-medium text-white drop-shadow">
-                    {ocrMessage}
-                  </span>
-                )}
-              </div>
-
-              {showCamera && cameraStatus === "live" && (
-                <div className="flex gap-2 p-3">
-                  <button type="button" onClick={onCapture} className="btn-smu btn-smu-gold flex-1">
-                    <Camera className="h-4 w-4" /> Capture and read
-                  </button>
-                  <button type="button" onClick={stopCamera} className="btn-smu btn-smu-outline">
-                    Close camera
-                  </button>
-                </div>
-              )}
-
-              <dl
-                className={`flex flex-col gap-1.5 p-4 font-mono text-[11px] ${inSetup ? "hidden" : ""}`}
-              >
-                {steps.map(([label, value, ok]) => (
-                  <div key={label} className="flex justify-between gap-3">
-                    <dt className="text-smu-muted">{label}</dt>
-                    <dd className={`truncate text-right ${ok ? "text-[#287a28]" : ""}`}>
-                      {value ?? "…"} {ok ? "✓" : ""}
+          {demo && (
+            <div className="rounded-md border border-dashed border-black/20 p-4">
+              <p className="text-[14px] font-semibold text-black/70">Demo · how the reading travels</p>
+              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 font-mono text-[13px]">
+                {pipeline.map(([label, value, ok]) => (
+                  <div key={label} className="contents">
+                    <dt className="text-black/60">{label}</dt>
+                    <dd className={`truncate text-right ${ok ? "text-[#287a28]" : "text-black/70"}`}>
+                      {value ?? "…"}
+                      {ok ? " ✓" : ""}
                     </dd>
                   </div>
                 ))}
               </dl>
-            </section>
-
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => void onUpload(e)}
-            />
-          </>
-        }
-        side={
-          <>
-            {busy && (
-              // Laptop only: fills the side column while the photo is read.
-              <section className="hidden rounded-md border border-black/10 bg-white p-5 shadow-card lg:block">
-                <p className="font-display text-[11px] uppercase tracking-[2px] text-smu-muted">
-                  Weighing in progress
-                </p>
-                <dl className="mt-3 flex flex-col gap-2 text-[13px]">
-                  {(
-                    [
-                      ["Cleaner", `${cleaner.name} · ${cleaner.pass}`],
-                      ["Building", bin.name],
-                      ["Pantry", pantry],
-                      [
-                        "Bin before",
-                        beforeKg == null ? "…" : `${beforeKg.toFixed(2)} / ${bin.capacityKg} kg`,
-                      ],
-                    ] as const
-                  ).map(([k, v]) => (
-                    <div key={k} className="flex justify-between gap-3">
-                      <dt className="text-smu-muted">{k}</dt>
-                      <dd className="text-right font-medium text-smu-navy">{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <p className="mt-4 flex items-center gap-2 rounded bg-smu-cream px-3 py-2 text-[11.5px] text-smu-muted">
-                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-smu-gold" />
-                  {phase === "ocr" ? ocrMessage : "Finding the scale display in the photo…"}
-                </p>
-              </section>
-            )}
-
-            {phase === "saved" && event && (
-              <section className="fade-up rounded-md border border-smu-success/30 bg-[#eef7ea] p-5">
-                <p className="font-display text-[11px] uppercase tracking-[2px] text-[#287a28]">
-                  Logged to audit trail
-                </p>
-                <p className="mt-1 font-display text-[34px] leading-10 tabular-nums text-[#287a28]">
-                  +{event.kg.toFixed(2)} kg
-                </p>
-                <p className="text-[13px] text-smu-muted">
-                  from {event.pantry} · bin {event.beforeKg?.toFixed(2)} →{" "}
-                  {event.afterKg?.toFixed(2)} kg
-                  <span className="text-black/40"> / {bin.capacityKg} kg</span>
-                </p>
-                <p className="mt-1 text-[11px] text-smu-muted">
-                  {cleaner.name} ·{" "}
-                  <span suppressHydrationWarning>{new Date(event.at).toLocaleTimeString()}</span> ·{" "}
-                  {event.source === "ocr"
-                    ? `OCR in ${((ocrMs ?? 0) / 1000).toFixed(1)}s`
-                    : "reference reading"}
-                </p>
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <Link
-                    href={`/dashboard?bin=${bin.id}`}
-                    className="btn-smu btn-smu-gold col-span-2"
-                  >
-                    View {bin.short} on dashboard →
-                  </Link>
-                  <Link
-                    href={`/cleaner/building?cleaner=${cleaner.id}`}
-                    className="btn-smu btn-smu-outline btn-smu-sm"
-                  >
-                    Log another pantry
-                  </Link>
-                  <Link href="/cleaner" className="btn-smu btn-smu-outline btn-smu-sm">
-                    Sign out
-                  </Link>
-                </div>
-              </section>
-            )}
-
-            {phase === "rejected" && (
-              <section className="fade-up rounded-md border border-smu-warning/30 bg-smu-warning/10 p-5 text-[13px]">
-                <p className="font-semibold text-[#8a6209]">
-                  Reading isn&apos;t above the bin&apos;s last total
-                </p>
-                <p className="mt-1 text-smu-muted">
-                  Scale shows {readKg != null ? `${readKg.toFixed(2)} kg` : "no change"}, bin was{" "}
-                  {beforeKg?.toFixed(2)} kg. The photo may have caught the scale before the grounds
-                  settled.
-                </p>
+              <p className="mt-3 text-[13px] text-black/60">
+                Reads the display with PaddleOCR on Hugging Face, saves to the shared Postgres
+                database.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    source === "sample" ? void runSample(shot?.src) : chooseSource(source)
-                  }
-                  className="btn-smu btn-smu-gold mt-3 w-full"
+                  onClick={() => {
+                    runRef.current++;
+                    setWaking(false);
+                    setPending(null);
+                    setError("Demo: glare on the display stopped a clean read.");
+                    setPhase("failed");
+                  }}
+                  className="btn-smu btn-smu-outline btn-smu-sm"
                 >
-                  <RefreshCw className="h-4 w-4" /> Take another photo
+                  Simulate unreadable photo
                 </button>
-              </section>
-            )}
-
-            {phase === "failed" && (
-              <section className="fade-up rounded-md border border-smu-danger/25 bg-smu-danger/5 p-5 text-[13px]">
-                <p className="font-semibold text-smu-danger">Couldn&apos;t read the scale</p>
-                <p className="mt-1 text-smu-danger/80">{error}</p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {shot && (
-                    <button
-                      type="button"
-                      onClick={retryOcr}
-                      className="btn-smu btn-smu-gold btn-smu-sm"
-                    >
-                      Retry OCR
-                    </button>
-                  )}
-                  {shot?.refKg != null ? (
-                    <button
-                      type="button"
-                      onClick={() => void applyReference()}
-                      className="btn-smu btn-smu-outline btn-smu-sm"
-                      title="Logs the sample photo's known reading, flagged as a fallback in the audit trail"
-                    >
-                      Use reference {shot.refKg} kg
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => chooseSource(source)}
-                      className="btn-smu btn-smu-outline btn-smu-sm"
-                    >
-                      Take another photo
-                    </button>
-                  )}
-                </div>
-              </section>
-            )}
-
-            {phase === "swap" && (
-              <section className="fade-up rounded-md border border-smu-danger/25 bg-smu-danger/5 p-5 text-[13px]">
-                <p className="font-semibold text-smu-danger">{bin.short} bin is too full to weigh</p>
-                <p className="mt-1 text-smu-muted">
-                  It already holds {beforeKg?.toFixed(1)} kg of {bin.capacityKg} kg. Swap in an
-                  empty bin, then weigh again.
-                </p>
                 <button
                   type="button"
-                  onClick={() => void swapBin()}
-                  className="btn-smu btn-smu-gold mt-3 w-full"
+                  onClick={() => {
+                    runRef.current++;
+                    setWaking(false);
+                    setBeforeKg(before);
+                    setRead(Math.max(0, Math.round((before - 0.4) * 100) / 100));
+                    setPhase("rejected");
+                  }}
+                  className="btn-smu btn-smu-outline btn-smu-sm"
                 >
-                  <Truck className="h-4 w-4" /> I&apos;ve swapped the bin · log collection
+                  Simulate too-low reading
                 </button>
-              </section>
-            )}
-
-            <div className="hidden rounded-md border border-black/10 bg-white p-4 lg:block">
-              <p className="flex items-center gap-2 text-[11.5px] text-smu-muted">
-                <ScanText className="h-3.5 w-3.5" /> Reads the display with PaddleOCR on Hugging
-                Face
-              </p>
-              <p className="mt-2 flex items-center gap-2 text-[11.5px] text-smu-muted">
-                <CheckCircle2 className="h-3.5 w-3.5 text-smu-success" /> Saves to the shared
-                Postgres database
-              </p>
-            </div>
-
-            {/* Demo controls: force the failure paths without touching the camera. */}
-            {demoControlsEnabled && (
-              <div className="rounded-md border border-dashed border-black/15 p-4">
-                <p className="font-display text-[10px] uppercase tracking-[2px] text-black/35">
-                  Demo states
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      runRef.current++;
-                      setError("Demo: LCD glare prevented a clean read.");
-                      setPhase("failed");
-                    }}
-                    className="btn-smu btn-smu-outline btn-smu-sm"
-                  >
-                    Simulate OCR failure
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      runRef.current++;
-                      setReadKg(Math.max(0, (beforeKg ?? 0) - 0.4));
-                      setPhase("rejected");
-                    }}
-                    className="btn-smu btn-smu-outline btn-smu-sm"
-                  >
-                    Simulate stale reading
-                  </button>
-                </div>
               </div>
-            )}
-          </>
-        }
+            </div>
+          )}
+        </div>
+
+        <Panel className="flex flex-col gap-5 p-6 lg:sticky lg:top-6">{panel}</Panel>
+      </div>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => void onUpload(e)}
       />
     </CleanerShell>
+  );
+}
+
+function SwapReminder() {
+  return (
+    <p
+      role="status"
+      className="rounded border border-smu-gold/40 bg-smu-cream-light px-4 py-3 text-[16px] leading-6 text-black/85"
+    >
+      Bin swapped. Put the empty bin on the scale and press <strong>Z/T</strong>, then add the
+      grounds.
+    </p>
+  );
+}
+
+function PanelTitle({ children }: { children: ReactNode }) {
+  return <h2 className="font-display text-[30px] leading-9 text-smu-navy">{children}</h2>;
+}
+
+/** The bin's weight before and after, and what this pantry added. */
+function Sum({ before, after, level }: { before: number; after: number; level: number }) {
+  return (
+    <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 border-y border-black/10 py-3 text-[16px] tabular-nums">
+      <dt className="text-black/65">Bin before</dt>
+      <dd className="text-right">{kg(before)}</dd>
+      <dt className="text-black/65">Bin now</dt>
+      <dd className="text-right">{kg(after)}</dd>
+      <dt className="font-semibold">Added from Level {level}</dt>
+      <dd className="text-right font-semibold text-[#287a28]">+{kg(after - before)}</dd>
+    </dl>
   );
 }

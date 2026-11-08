@@ -213,6 +213,19 @@
     @apply px-3 py-1.5 text-[13.5px] leading-5;
   }
 
+  /* Cleaner station: big controls and plain reading text for a shared laptop at the bin. */
+  .cleaner-action {
+    @apply h-[52px] w-full px-5 text-[17px];
+  }
+
+  .cleaner-body {
+    @apply text-[17px] leading-7 text-black/75;
+  }
+
+  .cleaner-link {
+    @apply inline-flex items-center gap-2 self-start text-[16px] font-semibold text-smu-gold-dark underline-offset-4 transition-colors hover:text-smu-navy hover:underline;
+  }
+
   .text-link {
     @apply inline-flex items-center gap-1.5 font-semibold text-smu-gold-dark transition-colors hover:text-smu-navy;
   }
@@ -393,6 +406,17 @@
   @media (max-width: 1023px) {
     .campus-pin {
       translate: calc(-50% + var(--nx, 0px)) calc(-50% + var(--ny, 0px));
+    }
+  }
+
+  /* Large pins on the cleaner's campus map. Close pins are nudged apart per screen size. */
+  .campus-pin-lg {
+    translate: calc(-50% + var(--nx, 0px)) calc(-50% + var(--ny, 0px));
+  }
+
+  @media (min-width: 1024px) {
+    .campus-pin-lg {
+      translate: calc(-50% + var(--wx, 0px)) calc(-50% + var(--wy, 0px));
     }
   }
 

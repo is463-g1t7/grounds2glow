@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { ChartCard } from "@/components/ui/chart-card";
 import { ago } from "@/lib/analytics";
 import { COLLECTOR_LABEL, statusFor } from "@/lib/bins";
+import { weight } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Bin, BinStatus } from "@/lib/types";
 
@@ -69,7 +70,7 @@ export function CollectionStatus({
                 type="button"
                 onClick={() => onSelect(b.id)}
                 aria-pressed={selected}
-                aria-label={`Inspect ${b.name}: ${b.weightKg.toFixed(1)} of ${b.capacityKg} kilograms, ${STATUS[s].label}`}
+                aria-label={`Inspect ${b.name}: ${weight(b.weightKg)} of ${weight(b.capacityKg)}, ${STATUS[s].label}`}
                 className="grid min-w-0 flex-1 gap-1 text-left"
               >
                 <span className="flex items-center gap-2 text-[12.5px]">
@@ -79,7 +80,7 @@ export function CollectionStatus({
                     {STATUS[s].label}
                   </span>
                   <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-                    <span className="font-medium text-black">{b.weightKg.toFixed(1)}</span> / {b.capacityKg} kg
+                    <span className="font-medium text-black">{weight(b.weightKg)}</span> / {weight(b.capacityKg)}
                   </span>
                 </span>
                 <span className="flex items-center gap-2">
@@ -152,7 +153,7 @@ export function CollectConfirm({
               Log collection from {bin.short}?
             </h2>
             <p className="text-[13px] leading-5 text-muted-foreground">
-              <span className="font-semibold tabular-nums text-black">{bin.weightKg.toFixed(2)} kg</span> from{" "}
+              <span className="font-semibold tabular-nums text-black">{weight(bin.weightKg)}</span> from{" "}
               {bin.name} will be logged as repurposed grounds, collected by{" "}
               <span className="font-semibold text-black">{COLLECTOR_LABEL}</span>. The bin resets to 0 kg.
             </p>

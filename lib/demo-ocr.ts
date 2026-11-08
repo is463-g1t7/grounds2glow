@@ -74,7 +74,7 @@ export function demoScaleLines(kg: number, size: Size): OcrLine[] {
   return [
     { text: `${kg.toFixed(2)} kg`, box: box(0.42, 0.11, 0.16, 0.13, size) },
     { text: "SMU SMART BIN", box: box(0.33, 0.39, 0.34, 0.05, size) },
-    { text: "SCALE · 10 kg", box: box(0.37, 0.47, 0.25, 0.04, size) },
+    { text: "SCALE · 2 kg", box: box(0.37, 0.47, 0.25, 0.04, size) },
   ];
 }
 

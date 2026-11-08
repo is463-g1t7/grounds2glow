@@ -12,16 +12,20 @@ import type { BinEvent, Cleaner } from "../lib/types";
  */
 
 const HOUR = 3_600_000;
-const round2 = (n: number) => Math.round(n * 100) / 100;
+const roundG = (n: number) => Math.round(n * 1000) / 1000;
 
+/**
+ * Bins are sized to the prototype: a small container on a kitchen scale, 2 kg when full.
+ * LKS is the physical prototype bin, so it starts empty and real readings build up from there.
+ */
 const bins = [
-  { id: "bin-soa", short: "SOA", name: "School of Accountancy", pantry: "SOA Lobby · L1", weightKg: 3.1, capacityKg: 10, levels: 5 },
-  { id: "bin-lkcsb", short: "LKCSB", name: "Lee Kong Chian School of Business", pantry: "LKCSB Lobby · L1", weightKg: 8.6, capacityKg: 10, levels: 4 },
-  { id: "bin-soe", short: "SOE", name: "School of Economics", pantry: "SOE Lobby · L1", weightKg: 10, capacityKg: 10, levels: 4 },
-  { id: "bin-scis", short: "SCIS", name: "School of Computing and Information Systems", pantry: "SCIS Lobby · L1", weightKg: 1.2, capacityKg: 10, levels: 5 },
-  { id: "bin-yphsl", short: "YPHSL", name: "Yong Pung How School of Law", pantry: "YPHSL Lobby · L1", weightKg: 3.6, capacityKg: 10, levels: 6 },
-  { id: "bin-soss", short: "SOSS", name: "School of Social Sciences", pantry: "SOSS Lobby · L1", weightKg: 6.4, capacityKg: 10, levels: 4 },
-  { id: "bin-lib", short: "LKS", name: "Li Ka Shing Library", pantry: "LKS Lobby · L1", weightKg: 2.2, capacityKg: 10, levels: 5 },
+  { id: "bin-soa", short: "SOA", name: "School of Accountancy", pantry: "SOA Lobby · L1", weightKg: 0.62, capacityKg: 2, levels: 5 },
+  { id: "bin-lkcsb", short: "LKCSB", name: "Lee Kong Chian School of Business", pantry: "LKCSB Lobby · L1", weightKg: 1.72, capacityKg: 2, levels: 4 },
+  { id: "bin-soe", short: "SOE", name: "School of Economics", pantry: "SOE Lobby · L1", weightKg: 2, capacityKg: 2, levels: 4 },
+  { id: "bin-scis", short: "SCIS", name: "School of Computing and Information Systems", pantry: "SCIS Lobby · L1", weightKg: 0.24, capacityKg: 2, levels: 5 },
+  { id: "bin-yphsl", short: "YPHSL", name: "Yong Pung How School of Law", pantry: "YPHSL Lobby · L1", weightKg: 0.72, capacityKg: 2, levels: 6 },
+  { id: "bin-soss", short: "SOSS", name: "School of Social Sciences", pantry: "SOSS Lobby · L1", weightKg: 1.28, capacityKg: 2, levels: 4 },
+  { id: "bin-lib", short: "LKS", name: "Li Ka Shing Library", pantry: "LKS Lobby · L1", weightKg: 0, capacityKg: 2, levels: 5 },
 ];
 
 const cleaners: Cleaner[] = [
@@ -33,21 +37,21 @@ const cleaners: Cleaner[] = [
 
 /** How each building's pantries behave: fill rate, which levels drink the most, who empties them. */
 const profiles: Record<string, { kgPerDay: number; levelWeights: number[]; am: string; pm: string }> = {
-  "bin-soa": { kgPerDay: 1.2, levelWeights: [1, 3, 1.5, 2, 0.5], am: "c-0142", pm: "c-0388" },
-  "bin-lkcsb": { kgPerDay: 1.6, levelWeights: [1, 3.5, 2, 1], am: "c-0142", pm: "c-0388" },
-  "bin-soe": { kgPerDay: 1.8, levelWeights: [1, 1.5, 4, 1.5], am: "c-0217", pm: "c-0451" },
-  "bin-scis": { kgPerDay: 0.8, levelWeights: [0.5, 2, 3, 1, 1], am: "c-0217", pm: "c-0451" },
+  "bin-soa": { kgPerDay: 0.24, levelWeights: [1, 3, 1.5, 2, 0.5], am: "c-0142", pm: "c-0388" },
+  "bin-lkcsb": { kgPerDay: 0.32, levelWeights: [1, 3.5, 2, 1], am: "c-0142", pm: "c-0388" },
+  "bin-soe": { kgPerDay: 0.36, levelWeights: [1, 1.5, 4, 1.5], am: "c-0217", pm: "c-0451" },
+  "bin-scis": { kgPerDay: 0.16, levelWeights: [0.5, 2, 3, 1, 1], am: "c-0217", pm: "c-0451" },
   // L6 is a quiet pantry on purpose, so the level chart has a gap to show.
-  "bin-yphsl": { kgPerDay: 1.0, levelWeights: [1, 1, 1.5, 0.5, 3, 0], am: "c-0217", pm: "c-0388" },
-  "bin-soss": { kgPerDay: 1.1, levelWeights: [3, 1, 1, 0.5], am: "c-0142", pm: "c-0451" },
-  "bin-lib": { kgPerDay: 0.9, levelWeights: [1, 1.5, 1, 3, 0.5], am: "c-0217", pm: "c-0388" },
+  "bin-yphsl": { kgPerDay: 0.2, levelWeights: [1, 1, 1.5, 0.5, 3, 0], am: "c-0217", pm: "c-0388" },
+  "bin-soss": { kgPerDay: 0.22, levelWeights: [3, 1, 1, 0.5], am: "c-0142", pm: "c-0451" },
+  "bin-lib": { kgPerDay: 0.18, levelWeights: [1, 1.5, 1, 3, 0.5], am: "c-0217", pm: "c-0388" },
 };
 
 const HISTORY_DAYS = 30;
 const OPEN_HOUR = 8;
 const CLOSE_HOUR = 20;
 const WORK_HOURS_PER_DAY = CLOSE_HOUR - OPEN_HOUR;
-const AVG_CADDY_KG = 0.65;
+const AVG_CADDY_KG = 0.13;
 
 /** Small deterministic PRNG so every reset produces the same history. */
 function mulberry32(seed: number) {
@@ -87,8 +91,8 @@ function splitKg(total: number, rand: () => number): number[] {
   const n = Math.max(1, Math.round(total / AVG_CADDY_KG));
   const weights = Array.from({ length: n }, () => 0.5 + rand());
   const sum = weights.reduce((s, w) => s + w, 0);
-  const parts = weights.map((w) => round2((total * w) / sum));
-  parts[n - 1] = round2(total - parts.slice(0, -1).reduce((s, p) => s + p, 0));
+  const parts = weights.map((w) => roundG((total * w) / sum));
+  parts[n - 1] = roundG(total - parts.slice(0, -1).reduce((s, p) => s + p, 0));
   return parts;
 }
 
@@ -126,7 +130,7 @@ export function buildEvents(): BinEvent[] {
     for (;;) {
       const collectH = startH + 0.1 + rand() * 0.4;
       const endH = collectH + 1 + rand() * 4; // the bin sits full for a few hours
-      const total = round2(Math.min(bin.capacityKg, bin.capacityKg * (0.85 + rand() * 0.2)));
+      const total = roundG(Math.min(bin.capacityKg, bin.capacityKg * (0.85 + rand() * 0.2)));
       const fillStartH = endH + total / rate;
       if (fillStartH > limit) break;
       fills.push({ total, startH: fillStartH, endH, collectH });
@@ -147,7 +151,7 @@ export function buildEvents(): BinEvent[] {
         const level = pickLevel(profile.levelWeights, rand);
         const r = rand();
         const before = weight;
-        weight = round2(weight + kg);
+        weight = roundG(weight + kg);
         events.push({
           id: id(),
           at: new Date(at).toISOString(),

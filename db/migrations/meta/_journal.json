@@ -15,6 +15,13 @@
       "when": 1794044654286,
       "tag": "0001_collected_by",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794131491006,
+      "tag": "0002_gram_precision",
+      "breakpoints": true
     }
   ]
 }

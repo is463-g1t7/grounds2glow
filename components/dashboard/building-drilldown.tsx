@@ -64,7 +64,7 @@ export function BuildingDrilldown({
           </h2>
           <p className="text-[13px] text-smu-muted">
             <span className="font-semibold tabular-nums text-black">
-              {bin.weightKg.toFixed(2)} / {bin.capacityKg} kg
+              {kg(bin.weightKg)} / {kg(bin.capacityKg)}
             </span>{" "}
             in the central bin · {STATUS[statusFor(bin.weightKg, bin.capacityKg)].label} · {levelsFor(bin)} pantry levels
           </p>

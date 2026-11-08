@@ -1,3 +1,4 @@
+import { weight } from "@/lib/format";
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
@@ -68,7 +69,7 @@ export function DemoRouteSection({ events }: { events: BinEvent[] }) {
                     <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> New reading received
                   </p>
                   <p className="mt-2 font-display text-[34px] leading-10 tabular-nums text-[#287a28]">
-                    +{arrived.kg.toFixed(2)} kg
+                    +{weight(arrived.kg)}
                   </p>
                   {arrived.pantry && <p className="text-[14px] leading-5">from {arrived.pantry}</p>}
                 </div>
