@@ -171,7 +171,8 @@ Two application rules are worth calling out here:
   prerendered shell, and `/cleaner/building`, `/cleaner/weigh`, `/dashboard` and `/kiosk` stream the
   dynamic remainder. All `/api/*` routes are dynamic.
 - `next/font` self-hosts Oswald and Libre Franklin at build time, avoiding runtime font requests.
-- `next/image` serves responsive landing images; the hero image is eager and the rest are lazy.
+- `next/image` serves the landing images with responsive `sizes`; images are lazy by default, with
+  an eager/high-priority option in `ScaleReadout` for a hero-style image.
 - The barcode decoder is dynamically imported only when a camera starts, keeping it out of the
   initial bundle. QR codes are generated locally with the `qrcode` package, not fetched from an
   image service.
@@ -245,7 +246,7 @@ implemented from what is only a design target.
 | **Data efficiency** | Analytics and CSV export are computed client-side from the bootstrap payload. Reset reseeds and re-queries Postgres server-side but returns the fresh payload in the same response, avoiding a follow-up API call. | `lib/analytics.ts`, `lib/client/csv.ts`, `app/api/reset/route.ts` |
 | **Data minimisation** | No third-party analytics or tracking scripts. The barcode route does not log scanned values. Only the scale photo or a crop is sent to OCR. | `app/api/barcode/resolve/route.ts`; no analytics dependency in `package.json` |
 | **Database efficiency** | A small reused connection pool, targeted indexes, row-level locks and transactions avoid repeated connections and conflicting writes. Bootstrap runs six queries in parallel. | `lib/db.ts`, `db/schema.ts`, `getBootstrap()`/`createReading()`/`collectBin()` in `lib/queries.ts` |
-| **Asset efficiency** | Fonts are self-hosted at build time; landing images use `next/image` with responsive sizes; the hero is eager and the rest lazy; `prefers-reduced-motion` turns off transitions. | `app/layout.tsx`, `components/landing/shared.tsx`, `app/globals.css` |
+| **Asset efficiency** | Fonts are self-hosted at build time; landing images use `next/image` with responsive sizes and lazy loading by default; `prefers-reduced-motion` turns off transitions. | `app/layout.tsx`, `components/landing/shared.tsx`, `app/globals.css` |
 | **Longevity** | Migrations, a deterministic seed and a data-integrity check keep the prototype reproducible; the dependency set is small. | `db/migrations/`, `scripts/seed.ts`, `scripts/check-seed.ts` |
 
 ### 9.2 Design-stage carbon estimate
