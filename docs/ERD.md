@@ -7,8 +7,6 @@ The schema is defined in [`db/schema.ts`](../db/schema.ts) and applied by the mi
 erDiagram
     CLEANERS |o--o{ BIN_EVENTS : "signs in (deposits)"
     BINS ||--o{ BIN_EVENTS : "records"
-    LISTINGS ||--o{ CLAIMS : "claimed via"
-    %% Legacy marketplace tables: kept in the schema, not seeded or read.
 
     CLEANERS {
         text id PK
@@ -44,29 +42,6 @@ erDiagram
         numeric before_kg
         numeric after_kg
         text photo
-    }
-
-    LISTINGS {
-        text id PK
-        text title
-        text type "Espresso, Filter or Decaf"
-        numeric weight_kg
-        text building
-        text donor
-        text pickup
-        text image
-        text_array tags
-        text note
-        boolean claimed
-        timestamptz claimed_at
-        timestamptz created_at
-    }
-
-    CLAIMS {
-        text id PK
-        text listing_id FK
-        text claimant
-        timestamptz created_at
     }
 
     NEWS_ITEMS {
@@ -109,8 +84,8 @@ erDiagram
 | `programme_metrics` | Active | Landing impact cards; seeded demo values |
 | `news_items` | Seeded, not surfaced | No current UI |
 | `programme_events` | Seeded, not surfaced | No current UI; some seeded dates are upcoming |
-| `listings` | Legacy, unused | Removed marketplace; not seeded or read |
-| `claims` | Legacy, unused | Removed marketplace; not seeded or read |
+| `listings` | Dropped | Removed marketplace; dropped in migration `0003_optimal_mole_man.sql` |
+| `claims` | Dropped | Removed marketplace; dropped in migration `0003_optimal_mole_man.sql` |
 
 ## Constraints and indexes
 
@@ -120,9 +95,8 @@ erDiagram
   `ocr`, `reference`, `manual` or `demo` while collection events leave it null.
 - `bin_events.bin_id` references `bins.id` with `ON DELETE CASCADE`; `bin_events.cleaner_id`
   references `cleaners.id` with `ON DELETE SET NULL`.
-- Indexes: `bin_events(bin_id, at desc)`, `bin_events(at desc)`, `listings(created_at desc)`.
-- Weights are `numeric(7,3)` so stored values keep gram precision. The ERD uses `text_array` as a
-  diagram alias for the Postgres `text[]` type on `listings.tags`.
+- Indexes: `bin_events(bin_id, at desc)`, `bin_events(at desc)`.
+- Weights are `numeric(7,3)` so stored values keep gram precision.
 
 The application writes a deposit and updates the bin in one transaction with a row lock. The history
 therefore remains consistent even when two demo controls run at once. `bun run db:check` replays the

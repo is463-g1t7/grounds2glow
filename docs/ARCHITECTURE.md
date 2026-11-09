@@ -113,9 +113,15 @@ without a network call or LLM. Anything else goes to `POST /api/kiosk-chat`, whi
 
 - limits each IP to 30 messages per minute (in-memory, per server instance);
 - rejects prompts over 2,000 characters;
+- normalizes the prompt (case, whitespace, trailing punctuation), hashes it with SHA-256 and checks a
+  24-hour Upstash cache before calling OpenRouter; successful answers are written back, and the
+  response reports `x-answer-cache: HIT|MISS|BYPASS`;
 - sends a kiosk-specific system prompt to OpenRouter with `temperature: 0.4`, `max_tokens: 600` and a
   25-second timeout;
 - returns a 503 with a friendly message when the key is missing or the upstream call fails.
+
+Bump the `kiosk-answer:v1` key prefix when the system prompt changes so cached answers are not
+reused across a policy change.
 
 If `OPENROUTER_API_KEY` is unset, matching questions still get the built-in guidance; unmatched
 questions show the offline message.
@@ -145,8 +151,8 @@ auto-collects the oldest full bin when two bins are full.
 
 The full Mermaid ERD, table status and constraints are in [ERD.md](ERD.md). The active tables are
 `bins`, `cleaners`, `bin_events` and `programme_metrics`. `news_items` and `programme_events` are
-seeded but no longer surfaced; `listings` and `claims` are legacy marketplace tables that are neither
-seeded nor read.
+seeded but no longer surfaced. The legacy marketplace tables `listings` and `claims` were dropped in
+migration `0003_optimal_mole_man.sql`.
 
 Two application rules are worth calling out here:
 
@@ -246,10 +252,10 @@ implemented from what is only a design target.
 | Principle | What the prototype does | Evidence |
 | --- | --- | --- |
 | **Carbon efficiency** | One shared Next.js deployment and one managed database instead of a server per bin or building. Vercel runs the app on demand rather than keeping an always-on VM for the prototype. | `next.config.ts`, `.github/workflows/deploy.yml`; seven shared bins in `scripts/seed.ts` |
-| **Energy efficiency** | Deterministic kiosk answers avoid an LLM call for common questions. OCR runs only when a cleaner weighs a bin, not on a timer. Photos are cropped and downscaled before upload. | `getBuiltInGuidance()` in `components/kiosk/kiosk-chat.tsx`; `MAX_SIDE = 1600` and JPEG quality 0.9 in `lib/client/scale-ocr.ts` |
+| **Energy efficiency** | Deterministic kiosk answers avoid an LLM call for common questions; repeated unmatched questions hit a 24-hour Upstash answer cache. OCR runs only when a cleaner weighs a bin, not on a timer. Photos are cropped and downscaled before upload. | `getBuiltInGuidance()` in `components/kiosk/kiosk-chat.tsx`; `lib/cache.ts`; `MAX_SIDE = 1600` and JPEG quality 0.9 in `lib/client/scale-ocr.ts` |
 | **Energy efficiency** | Live polling is limited to the landing demo; the dashboard refreshes on open, tab focus and an explicit button. The 15-second Upstash snapshot absorbs repeated landing polls and cuts Postgres reads. | `app/(site)/page.tsx`; `components/dashboard/dashboard-client.tsx`; `lib/cache.ts` |
 | **Energy efficiency** | The barcode decoder is dynamically imported only when a camera starts, chart animations are disabled, and `useNow` wakes every 30 seconds to publish a minute-rounded value. | `lib/client/use-barcode-scanner.ts`, `components/ui/chart-card.tsx`, `lib/client/use-now.ts` |
-| **Hardware efficiency** | The browser supplies the camera and barcode detector, so the prototype needs no dedicated scanner hardware for the demo. QR codes are generated locally rather than fetched. | `lib/client/use-barcode-scanner.ts`, `lib/client/camera.ts`, `lib/client/use-qr.ts` |
+| **Hardware efficiency** | The browser supplies the camera and barcode detector, so the prototype needs no dedicated scanner hardware for the demo. QR codes are generated locally rather than fetched. | `lib/client/use-barcode-scanner.ts`, `lib/client/camera.ts`, `components/kiosk/kiosk-flow.tsx` |
 | **Hardware efficiency** | Local development uses one Docker Postgres container; production uses managed Supabase rather than a dedicated database VM. | `docker-compose.yml`, `lib/db.ts` |
 | **Data efficiency** | One aggregate `/api/bootstrap` request supplies all client surfaces instead of many small calls. `getEvents(limit)` supports bounded history reads. | `app/api/bootstrap/route.ts`, `lib/queries.ts` |
 | **Data efficiency** | The OCR upload cap, image downscaling and `max_tokens: 600` for chat keep payloads and model work small. The OCR route stores no uploaded photo by default. | `lib/languages.ts`, `lib/client/scale-ocr.ts`, `lib/openrouter.ts` |
@@ -290,9 +296,8 @@ to be re-checked before it is quoted externally.
 - **Cache granularity and privacy.** The 15-second cache stores the whole bootstrap payload, including
   the demo cleaner pass list, and a single key serves every caller. Split the hot bin/status data from
   the cold analytics, cache only fields the caller needs, and avoid caching real staff data.
-- **Legacy tables.** `listings` and `claims` are still in the schema and migrations. Dropping them
-  reduces storage, backup size and migration time. `news_items` and `programme_events` can be removed
-  once their seed data is no longer needed.
+- **Seed-only tables.** `news_items` and `programme_events` are still seeded but no longer read. Drop
+  them and their seed arrays when the historical data is no longer useful.
 - **OCR cold starts.** A sleeping PaddleOCR Space spends energy starting up. The hardware concept can
   read the load cell directly and remove cloud OCR entirely; until then, warm the Space only when a
   cleaner is actually at the station. The current timeout also does not abort the underlying Gradio
@@ -300,8 +305,9 @@ to be re-checked before it is quoted externally.
 - **Open endpoints.** `/api/ocr/*`, `/api/readings` and `/api/collect` can be called by anyone who
   finds the URL. Spam requests waste Hugging Face quota, database work and energy. Add a shared
   secret or a rate limiter before exposing the demo beyond the assessment.
-- **Answer caching.** Common LLM answers could be cached with a short TTL instead of calling
-  OpenRouter again for the same question.
+- **Answer-cache observability.** The LLM answer cache is keyed by a hash of the normalized prompt
+  and kept for 24 hours. Add a hit-rate metric and bump the key version when the system prompt
+  changes; there is no manual purge today.
 - **Region placement.** The current Vercel functions run in `iad1` (US East) while the Supabase
   database is in `eu-central-1` and users are in Singapore. Choosing a nearer region for both would
   cut network latency and energy. See [DEPLOYMENT.md](DEPLOYMENT.md) for the observed topology.
