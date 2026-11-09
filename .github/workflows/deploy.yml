@@ -1,7 +1,7 @@
 # Deploy production on every push to main.
-# Uses Vercel CLI + a personal token because the Vercel account cannot access
-# the private is463-g1t7 org repo (native Git integration would need the
-# Vercel GitHub App installed for that org).
+# Uses Vercel CLI + a personal token because the public is463-g1t7 org repo
+# has no native Vercel Git integration (that would need the Vercel GitHub App
+# installed for the org).
 name: Deploy
 
 on:

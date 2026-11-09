@@ -1,138 +1,75 @@
 # SMU Circular Coffee
 
-A redesigned SMU Circular Coffee prototype. The app is built with Next.js 16 (App Router),
-Postgres and Drizzle ORM, and uses the SMU design system from `../docs/DESIGN.md`.
+A working prototype of SMU's circular coffee loop. Pantry staff and cleaners weigh spent coffee
+grounds at a building bin, the reading lands on a live operations dashboard, and the Grounds to Glow
+kiosk turns grounds into a body scrub with an AI guide. Built for the IS463 demo.
 
-## What is in here
+Stack: Next.js 16 (App Router) · React 19 · Postgres 18 + Drizzle · Tailwind CSS 4 · Bun.
 
-- Landing page that follows the loop from pantry staff to live dashboard to kiosk, with live bin
-  data, the kiosk chat and a three-minute demo route.
-- Live operations dashboard and programme reporting.
-- Cleaner flow: pass scan → pantry picker → weigh station, with a printable pass sheet.
-- Scale scanner and OCR reader tools.
-- Grounds to Glow kiosk: welcome, check-in, QR guide, recipe, dispensing, thanks and
-  `?chat=1` mobile chat. Common questions get deterministic answers; other questions go to
-  OpenRouter using `z-ai/glm-5.3-flash` with a kiosk-specific system prompt.
-- Postgres-backed bins, audit events, cleaners, news, programme events and programme metrics.
-- Drizzle schema (`db/schema.ts`), generated migrations (`db/migrations/`) and a single
-  seed script (`scripts/seed.ts`).
+## Quick start
 
-## Local setup
-
-Requirements: Bun 1.4+, Docker.
+Requirements: Bun 1.4+ and Docker.
 
 ```bash
 bun install
 cp .env.local.example .env.local   # Windows: copy .env.local.example .env.local
-docker compose up -d
+docker compose up -d --wait
 bun run db:migrate
 bun run db:seed
 bun run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. The Docker database listens on **localhost:55432** and keeps its data in
+the `smu_pgdata` volume.
 
-The Docker database listens on **localhost:55432** (not 5432, to avoid clashing with a
-local Postgres). The compose file uses the `postgres:18` image and a named volume,
-`smu_pgdata`. The local `.env.local` points both `DATABASE_URL` and `DIRECT_URL` at it.
+## Routes to try
 
-### Database commands
-
-```bash
-bun run db:up        # start Postgres 18
-bun run db:generate  # generate a new SQL migration from db/schema.ts
-bun run db:migrate   # apply pending Drizzle migrations
-bun run db:seed      # load scripts/seed.ts data
-bun run db:check     # verify seeded history and weights agree
-bun run db:reset     # migrate + seed
-bun run db:down      # stop the container (volume is kept)
-```
-
-`db:migrate` uses `DIRECT_URL` when present, then `DATABASE_URL`. `scripts/seed.ts` uses the
-same precedence. `drizzle.config.ts` loads `.env.local` first, then `.env`, so local Docker
-and Supabase credentials can coexist. Bun loads both files automatically for `db:seed`.
-
-## Supabase
-
-The production-style database is Supabase. Put the pooler connection strings in `.env`:
-
-```env
-DATABASE_URL=postgresql://...pooler.supabase.com:6543/postgres
-DIRECT_URL=postgresql://...pooler.supabase.com:5432/postgres
-```
-
-Then run:
-
-```bash
-bun run db:migrate
-bun run db:seed
-```
-
-The empty Supabase database has been migrated with Drizzle and seeded with the same data as
-the local Docker database.
-
-## Data model
-
-| Table | Purpose |
+| Route | What it shows |
 | --- | --- |
-| `bins` | Seven building bins, current weight, capacity, pantry levels |
-| `cleaners` | Demo staff roster and pass numbers |
-| `bin_events` | Deposits and collections, with cleaner/source/before/after audit fields |
-| `listings` | Unused: kept from the removed marketplace, not seeded or reset |
-| `claims` | Unused: kept from the removed marketplace, not seeded or reset |
-| `news_items` | Unused: no longer shown on the landing page |
-| `programme_events` | Unused: no longer shown on the landing page |
-| `programme_metrics` | Programme-to-date impact metrics, set by the seed script |
+| `/` | Landing page: the loop, live bins, kiosk preview and demo route |
+| `/dashboard` | Live operations, collection status and programme reporting |
+| `/cleaner` | Cleaner check-in by staff-pass barcode (or typed pass) |
+| `/cleaner/building` | Pantry-level picker for the cleaner's building |
+| `/cleaner/weigh` | Weigh station: sample, upload or typed weight with real OCR |
+| `/kiosk` | Grounds to Glow kiosk; add `?chat=1` for the mobile chat |
+| `/passes` | Printable demo staff passes |
+| `/scan` | Scale scanner demo: sample or upload a display photo (simulated OCR) and deposit |
+| `/ocr` | Demo OCR tool (simulated OCR) |
 
-All demo rows live in `scripts/seed.ts`; there are no entity data arrays in components.
+Cleaner stations remember their setup in the browser: `?station=<bin-id>` (or `none`), `?scale=g` for
+a gram scale, and `?demo=1`/`?demo=0` for demo states. See `docs/DEMO.md` for the recording script.
 
-## API
+## Configuration and scripts
 
-| Route | Purpose |
-| --- | --- |
-| `GET /api/bootstrap` | All data needed by the client surfaces |
-| `POST /api/barcode/resolve` | Look up who a scanned staff pass or ID barcode belongs to |
-| `POST /api/ocr/scale` | Read a scale display photo with PaddleOCR on Hugging Face and return the weight |
-| `POST /api/ocr/warm` | Start waking the OCR Space before the weigh step needs it |
-| `POST /api/readings` | Record a floor-scale reading and update the bin |
-| `POST /api/collect` | Empty a bin and write an audit event |
-| `POST /api/sync` | Insert a simulated remote scale reading (demo controls only) |
-| `POST /api/simulate` | One demo live-day step, including auto-collect (demo controls only) |
-| `POST /api/kiosk-chat` | Grounds to Glow chat via OpenRouter |
-| `POST /api/reset` | Re-run `scripts/seed.ts` (demo controls only) |
+Local defaults live in `.env.local.example`. The full environment matrix and every database script
+are in [Deployment](docs/DEPLOYMENT.md). In short, `bun run db:up`, `db:migrate`, `db:seed` and
+`db:check` manage the Docker database, while `bun run dev`, `build`, `start` and `lint` run the app.
 
-Reset, Sync and Simulate return 403, and their buttons stay hidden, unless
-`NEXT_PUBLIC_DEMO_CONTROLS=true` is set. Leave it unset on shared deployments, because anyone who
-can reach the site could otherwise wipe the bin history.
+`NEXT_PUBLIC_DEMO_CONTROLS=true` exposes Reset, Sync, Simulate, demo states and the OCR pipeline
+readout. Leave it unset on shared deployments: anyone who can reach the site could otherwise reset
+the shared demo data and destroy readings collected during the demo.
 
-## Design
-
-The shared SMU design system is documented in `../docs/DESIGN.md`. The app uses Oswald for
-display, Libre Franklin for body text, SMU gold `#8A704C`, navy `#141B4D` and limestone
-`#E8E2DA`, with the fixed two-plane header, off-canvas menu, search overlay, page headers and
-footer matching the reference site.
-
-The implementation is a port of the Vite design prototype in
-`../.scratch/smu-redesign`; the product surfaces are intentionally 1:1. The landing page has since
-been rebuilt around the loop (see `PRODUCT.md`).
-
-## Verification
+## Verify
 
 ```bash
 bun run lint
 bun run build
-# with the Docker DB up and seeded:
+# with `bun run dev` running in another terminal and the Docker database seeded:
 curl http://localhost:3000/api/bootstrap
 ```
 
-Kiosk chat requires `OPENROUTER_API_KEY` in `.env` (or `.env.local`). Without it, the kiosk's
-deterministic answers still work and the API returns 503.
+The cleaner weigh step calls the PaddleOCR Space on Hugging Face; `/scan` and `/ocr` still use
+simulated OCR. When `OPENROUTER_API_KEY` is missing, pre-written guidance still answers matching
+kiosk questions; unmatched questions show the offline message.
 
-The cleaner weigh step reads the scale display with the `kevansoon/PaddleOCR` Hugging Face Space
-(set `HF_SPACE_ID` to use another, and `HF_TOKEN` if it's private). The Space sleeps after two
-days without use; the first read after that waits while it starts, and the page retries for up to
-two minutes. The `/scan` and `/ocr` pages still use the simulated OCR in `lib/demo-ocr.ts`.
+## Documentation
 
-The Playwright smoke test used during the port lives at
-`../.scratch/smu-reference/prototype-smoke.mjs` and covers DB seed/reset, dashboard simulation,
-marketplace claims, the cleaner flow, the kiosk flow and kiosk chat.
+- [Architecture](docs/ARCHITECTURE.md) — containers, components, flows, API and green computing
+- [Deployment](docs/DEPLOYMENT.md) — local Docker setup, Supabase, Vercel and CI/CD
+- [ERD](docs/ERD.md) — Mermaid entity-relationship diagram
+- [C4 diagrams](docs/diagrams/) — draw.io sources with rendered PNG/SVG
+- [Product](docs/PRODUCT.md) — users, purpose and product principles
+- [Design system](docs/DESIGN.md) — SMU tokens, type, layout and components
+- [Demo script](docs/DEMO.md) — narrated cleaner-flow walkthrough
+- [Feature parity archive](docs/archive/FEATURE-PARITY.md) — historical Vite-port audit
+- [SMU reference](docs/reference/SMU-REFERENCE.md) — design provenance and source links
