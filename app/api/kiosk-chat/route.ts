@@ -1,3 +1,8 @@
+import {
+  cacheConfigured,
+  readKioskAnswerCache,
+  writeKioskAnswerCache,
+} from "@/lib/cache";
 import { askOpenRouter } from "@/lib/openrouter";
 
 const SYSTEM_PROMPT = `You are the Grounds to Glow assistant at Singapore Management University (SMU).
@@ -59,8 +64,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const cached = await readKioskAnswerCache(prompt);
+    if (cached) {
+      return Response.json({ content: cached }, { headers: { "x-answer-cache": "HIT" } });
+    }
+
     const content = await askOpenRouter(SYSTEM_PROMPT, prompt);
-    return Response.json({ content });
+    await writeKioskAnswerCache(prompt, content);
+    return Response.json(
+      { content },
+      { headers: { "x-answer-cache": cacheConfigured ? "MISS" : "BYPASS" } },
+    );
   } catch (error) {
     console.error("[kiosk-chat]", error);
     return Response.json({ error: "Chat is unavailable right now." }, { status: 503 });

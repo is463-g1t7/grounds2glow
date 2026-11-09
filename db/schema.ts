@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import {
-  boolean,
   check,
   date,
   index,
@@ -72,41 +71,6 @@ export const binEvents = pgTable(
     check("bin_events_source_check", sql`${t.source} in ('ocr', 'reference', 'manual', 'demo')`),
   ]
 );
-
-export const listings = pgTable(
-  "listings",
-  {
-    id: text("id").primaryKey(),
-    title: text("title").notNull(),
-    type: text("type").notNull(),
-    weightKg: numeric("weight_kg", { precision: 6, scale: 2 }).notNull(),
-    building: text("building").notNull(),
-    donor: text("donor").notNull(),
-    pickup: text("pickup").notNull(),
-    image: text("image").notNull(),
-    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
-    note: text("note").notNull().default(""),
-    claimed: boolean("claimed").notNull().default(false),
-    claimedAt: timestamp("claimed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("listings_created_at_idx").on(t.createdAt.desc()),
-    check("listings_type_check", sql`${t.type} in ('Espresso', 'Filter', 'Decaf')`),
-    check("listings_weight_positive", sql`${t.weightKg} > 0`),
-  ]
-);
-
-export const claims = pgTable("claims", {
-  id: text("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()::text`),
-  listingId: text("listing_id")
-    .notNull()
-    .references(() => listings.id, { onDelete: "cascade" }),
-  claimant: text("claimant").notNull().default("You"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
 
 export const newsItems = pgTable("news_items", {
   id: text("id").primaryKey(),

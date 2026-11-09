@@ -96,8 +96,8 @@ bun run db:down      # stop the container (volume is kept)
 ```
 
 `db:seed` truncates `bin_events`, `news_items`, `programme_events`, `programme_metrics`, `bins` and
-`cleaners`, then inserts seven bins, four cleaners and about 30 days of deterministic history.
-`listings` and `claims` are legacy tables and are not seeded.
+`cleaners`, then inserts seven bins, four cleaners and about 30 days of deterministic history. The
+legacy marketplace tables were dropped in migration `0003_optimal_mole_man.sql`.
 
 > `db:seed` and `db:reset` are destructive. They target whichever host `DIRECT_URL` (or, failing
 > that, `DATABASE_URL`) resolves to; see the caution in §3.2 before running them.
@@ -137,7 +137,7 @@ the Preview values until Preview has its own Supabase database, then separate th
 `process.env.NEXT_PUBLIC_DEMO_CONTROLS` at runtime, so a runtime-only change can leave the UI and the
 API guard disagreeing. Rebuild and verify both after changing the value.
 
-### 4.1 Upstash cache
+### 4.1 Upstash caches
 
 `/api/bootstrap` caches a 15-second JSON snapshot in Upstash Redis when both REST variables are set.
 The cache is optional: without them the route reads Postgres on every request, and local builds still
@@ -145,11 +145,16 @@ work. The dashboard fetches on open, on tab focus and with the Refresh button; t
 `?refresh=1`, which bypasses the cache and writes a fresh snapshot. Deposits, collections, demo
 sync/simulate and reset delete the key so the next read is fresh.
 
+`POST /api/kiosk-chat` also uses Upstash: it hashes the normalized prompt and caches successful
+OpenRouter answers for 24 hours. A hit returns without calling the LLM and reports
+`x-answer-cache: HIT`; a miss calls OpenRouter and stores the answer. Bump the
+`smu-circular-coffee:kiosk-answer:v1` prefix when the system prompt changes.
+
 Upstash has a free direct plan (250 MB, 500K commands/month), but the Vercel Marketplace integration
 currently offers only paid Pay As You Go or fixed plans. This prototype uses the free direct
-database; its REST URL/token are set for Production and Preview. The cache stores the whole
-bootstrap payload, including demo cleaner pass numbers, for at most 15 seconds; do not put real
-staff data in it.
+database; its REST URL/token are set for Production and Preview. The bootstrap cache stores the whole
+payload, including demo cleaner pass numbers, for at most 15 seconds; do not put real staff data in
+it. The answer cache stores generated kiosk answers for up to 24 hours.
 
 ## 5. Supabase
 
