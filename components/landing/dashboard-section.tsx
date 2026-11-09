@@ -1,12 +1,12 @@
-import { ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { ago } from "@/lib/analytics";
 import { statusFor } from "@/lib/bins";
 import { weight } from "@/lib/format";
-import { SCALE_FRAMES } from "@/lib/scales";
 import type { Bin, BinEvent, BinStatus, Cleaner } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { LiveDot, ScaleReadout, StageMark } from "./shared";
+import { latestDeposit, LiveDot, StageMark } from "./shared";
 
 const statusStyle: Record<BinStatus, { bar: string; label: string; text: string }> = {
   ok: { bar: "bg-smu-gold", label: "OK", text: "text-smu-muted" },
@@ -20,6 +20,45 @@ function describeEvent(event: BinEvent, bins: Bin[], cleaners: Cleaner[]) {
   const who = cleaners.find((cleaner) => cleaner.id === event.cleanerId)?.name;
   const where = event.pantry ?? bin?.short ?? "a pantry";
   return who ? `${who} · ${where}` : where;
+}
+
+/**
+ * The newest reading when the page loaded is the baseline. A deposit that arrives after it
+ * came from this visit, so the demo's result shows up right where the bins update.
+ */
+function ReadingStatus({ events }: { events: BinEvent[] }) {
+  const latest = latestDeposit(events);
+  const [baselineId, setBaselineId] = useState<string | null>(null);
+
+  if (latest && baselineId === null) setBaselineId(latest.id);
+  const arrived = latest && baselineId !== null && latest.id !== baselineId ? latest : null;
+
+  return (
+    <div
+      role="status"
+      className={cn(
+        "mt-4 flex min-h-[60px] items-center rounded-[3px] border px-4 py-3 transition-colors duration-500",
+        arrived ? "border-smu-success bg-[#eef7ea]" : "border-black/10 bg-smu-cream-light"
+      )}
+    >
+      {arrived ? (
+        <p key={arrived.id} className="fade-up flex items-center gap-3 text-[14px] leading-5 text-black">
+          <CheckCircle2 aria-hidden="true" className="h-5 w-5 shrink-0 text-[#287a28]" />
+          <span>
+            <span className="font-semibold text-[#287a28]">New reading received</span>
+            <span className="block tabular-nums">
+              +{weight(arrived.kg)}{arrived.pantry ? ` from ${arrived.pantry}` : ""}
+            </span>
+          </span>
+        </p>
+      ) : (
+        <p className="flex items-center gap-3 text-[14px] leading-5 text-black/80">
+          <LiveDot />
+          Waiting for your reading from the pantry app
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function DashboardSection({
@@ -37,22 +76,23 @@ export function DashboardSection({
   error: string | null;
   now: number;
 }) {
-  const recent = events.slice(0, 4);
+  const recent = events.slice(0, 3);
 
   return (
-    <section id="dashboard" className="section-pad scroll-mt-[100px] bg-smu-navy text-white">
-      <div className="container-smu grid gap-12 lg:grid-cols-12 lg:gap-14">
-        <div className="lg:col-span-6">
+    <section id="dashboard" className="section-pad section-slant relative z-20 scroll-mt-[100px] overflow-hidden bg-smu-navy text-white md:py-24">
+      <div
+        aria-hidden="true"
+        className="absolute inset-y-0 right-0 hidden w-[52%] bg-white/[0.035] [clip-path:polygon(22%_0,100%_0,100%_100%,0_100%)] lg:block"
+      />
+      <div className="container-smu relative grid gap-12 lg:grid-cols-12 lg:items-center lg:gap-14">
+        <div className="lg:col-span-5">
           <StageMark stage={2} />
           <h2 className="display-h2 mt-5 text-white">The scale reads itself. The dashboard keeps up.</h2>
           <p className="mt-4 max-w-[60ch] text-[18px] leading-7 text-white">
-            Smart bin OCR reads the weight off the scale display and posts it straight to the
-            dashboard, so operations can see which bins need collecting.
+            Smart bin OCR reads the weight off the scale display and posts it to the dashboard,
+            so operations can see which bins need collecting.
           </p>
 
-          <div className="mt-8 overflow-hidden rounded-[4px]">
-            <ScaleReadout frame={SCALE_FRAMES[0]} sizes="(min-width: 1024px) 45vw, 100vw" />
-          </div>
 
           <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
             <Link href="/dashboard" className="cta cta-gold">
@@ -67,13 +107,15 @@ export function DashboardSection({
           </div>
         </div>
 
-        <div className="flex flex-col rounded-[4px] bg-white p-5 text-black shadow-lift md:p-7 lg:col-span-6">
+        <div className="flex flex-col rounded-[4px] border-t-4 border-smu-gold bg-white p-5 text-black shadow-lift md:p-7 lg:col-span-7">
           <div className="flex items-center justify-between gap-4 border-b border-black/10 pb-4">
             <h3 className="font-display text-[24px] leading-8 text-smu-navy">Live from the bins</h3>
             <span className="flex items-center gap-2 text-[13px] font-semibold text-[#287a28]">
               <LiveDot /> Live
             </span>
           </div>
+
+          {bins.length > 0 && <ReadingStatus events={events} />}
 
           {loading && !error && (
             <div aria-hidden="true" className="mt-5 space-y-4">
@@ -109,7 +151,7 @@ export function DashboardSection({
                           style={{ width: `${percent}%` }}
                         />
                       </span>
-                      <span className="w-[132px] text-right text-[13px] tabular-nums">
+                      <span className="w-[176px] text-right text-[13px] tabular-nums">
                         <span className="font-semibold">{weight(bin.weightKg)}</span>
                         <span className="text-smu-muted"> / {weight(bin.capacityKg)}</span>
                         <span className={cn("ml-2 inline-block w-[54px] text-left text-[11.5px] font-semibold", style.text)}>

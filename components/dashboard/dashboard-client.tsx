@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowUpRight, ChevronDown, Download, Pause, Play, RefreshCw, RotateCcw } from "lucide-react";
+import { ChevronDown, Download, Pause, Play, RefreshCw, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/smu/page-chrome";
 import { Toast } from "@/components/smu/toast";
 import { CampusMap } from "@/components/smu/campus-map";
@@ -222,9 +221,6 @@ export function DashboardClient() {
               </span>
               Live
             </span>
-            <Link href="/cleaner" target="_blank" rel="noreferrer" className="btn-smu btn-smu-outline btn-smu-sm">
-              Cleaner app <ArrowUpRight className="h-4 w-4" />
-            </Link>
             {demoControlsEnabled && (
               <details className="group relative">
                 <summary className="btn-smu btn-smu-outline btn-smu-sm list-none [&::-webkit-details-marker]:hidden">

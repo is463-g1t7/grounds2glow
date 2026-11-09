@@ -44,7 +44,7 @@ export function SiteFooter() {
                 <Link href="/kiosk"
                   className="inline-flex items-center gap-1.5 text-[14px] leading-[21px] text-white/80 transition-colors hover:text-white"
                 >
-                  Grounds to Glow kiosk
+                  Grounds to Glow Kiosk
                   <ArrowUpRight className="h-3.5 w-3.5 text-white/55" />
                 </Link>
               </li>

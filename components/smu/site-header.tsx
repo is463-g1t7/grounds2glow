@@ -30,27 +30,11 @@ const nav: NavItem[] = [
     children: [
       { label: "Scale scanner", href: "/scan", description: "Read the scale LCD and post a weight" },
       { label: "OCR reader", href: "/ocr", description: "Extract text from an image" },
-      { label: "Cleaner app", href: "/cleaner", description: "Scan a pass, pick a pantry and weigh" },
+      { label: "Smart bin dashboard", href: "/cleaner", description: "Scan a pass, pick a pantry and weigh" },
       { label: "Printable passes", href: "/passes", description: "Demo staff barcode cards" },
-      { label: "Grounds to Glow kiosk", href: "/kiosk", description: "Coffee scrub dispensing experience" },
     ],
   },
-  {
-    label: "The loop",
-    href: "/#loop",
-    children: [
-      { label: "Pantry staff", href: "/#pantry", description: "Scan a pass, pick a pantry and weigh" },
-      { label: "Smart bin OCR and dashboard", href: "/#dashboard", description: "From the scale to the live view" },
-      { label: "Grounds to Glow guide", href: "/#kiosk", description: "Ask the AI guide a question" },
-      { label: "Try the demo", href: "/#try", description: "The whole loop in three minutes" },
-    ],
-  },
-];
-
-const infoFor = [
-  { label: "Faculty and staff", href: "/dashboard" },
-  { label: "Facilities teams", href: "/cleaner" },
-  { label: "Kiosk visitors", href: "/kiosk" },
+  { label: "Grounds to Glow Kiosk", href: "/kiosk" },
 ];
 
 export function SiteHeader() {
@@ -255,41 +239,6 @@ export function SiteHeader() {
                 })}
               </ul>
             </nav>
-
-            <div className="mt-8">
-              <h2 className="font-display text-[15px] uppercase tracking-[2px] text-white/45">
-                Information for
-              </h2>
-              <ul className="mt-3 space-y-1">
-                {infoFor.map((item) => (
-                  <li key={item.label}>
-                    <Link href={item.href}
-                      onClick={() => setMenuOpen(false)}
-                      className="block rounded px-2 py-1.5 text-[15px] text-white/70 transition-colors hover:bg-white/5 hover:text-white"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-auto border-t border-white/10 pt-6">
-              <Link href="/kiosk"
-                onClick={() => setMenuOpen(false)}
-                className="group flex items-center justify-between rounded-lg bg-smu-gold/15 p-4 transition-colors hover:bg-smu-gold/25"
-              >
-                <div>
-                  <p className="font-display text-[17px] uppercase tracking-[1px] text-white">
-                    Grounds to Glow
-                  </p>
-                  <p className="mt-1 text-[13px] leading-5 text-white/60">
-                    Make a coffee scrub at the kiosk.
-                  </p>
-                </div>
-                <ArrowRight className="h-5 w-5 shrink-0 text-smu-gold-light transition-transform group-hover:translate-x-1" />
-              </Link>
-            </div>
           </div>
         </div>
       )}
