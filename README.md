@@ -26,7 +26,7 @@ the `smu_pgdata` volume.
 
 | Route | What it shows |
 | --- | --- |
-| `/` | Landing page: the loop, live bins, kiosk preview and demo route |
+| `/` | Landing page: intro and three-stage loop, live bins, dashboard and kiosk chat |
 | `/dashboard` | Live operations, collection status and programme reporting |
 | `/cleaner` | Cleaner check-in by staff-pass barcode (or typed pass) |
 | `/cleaner/building` | Pantry-level picker for the cleaner's building |
