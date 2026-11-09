@@ -78,4 +78,6 @@ export type BootstrapData = {
   news: NewsItem[];
   programmeEvents: ProgrammeEvent[];
   metrics: ProgrammeMetric[];
+  /** When this snapshot was read from Postgres (not when the browser fetched it). */
+  updatedAt?: string;
 };
