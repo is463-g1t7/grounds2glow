@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { statusFor } from "@/lib/bins";
@@ -57,10 +58,12 @@ export function CampusMap({
     <figure className="overflow-hidden rounded-md border border-black/10 bg-white">
       <div className={`relative overflow-hidden ${large ? "" : "md:aspect-[1024/403]"}`}>
         <div className={`relative ${large ? "" : "md:-translate-y-[14%]"}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src="/images/smu-campus-map.jpeg"
             alt="Illustrated map of the SMU campus"
+            width={1024}
+            height={671}
+            sizes="(min-width: 1024px) 60vw, 100vw"
             className="block h-auto w-full"
           />
           {bins.map((b) => {

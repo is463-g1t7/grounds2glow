@@ -6,8 +6,6 @@ import {
   binEvents,
   bins,
   cleaners,
-  newsItems,
-  programmeEvents,
   programmeMetrics,
 } from "@/db/schema";
 import type {
@@ -17,8 +15,6 @@ import type {
   BootstrapData,
   Cleaner,
   EventSource,
-  NewsItem,
-  ProgrammeEvent,
   ProgrammeMetric,
 } from "./types";
 
@@ -98,38 +94,6 @@ export async function resolveBarcode(code: string): Promise<BarcodeMatch | null>
   return cleaner ? { cleaner, name: cleaner.name } : null;
 }
 
-export async function getNews(): Promise<NewsItem[]> {
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(newsItems)
-    .orderBy(asc(newsItems.sort), desc(newsItems.publishedAt));
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    tag: r.tag,
-    publishedAt: r.publishedAt,
-    image: r.image,
-    href: r.href,
-  }));
-}
-
-export async function getProgrammeEvents(): Promise<ProgrammeEvent[]> {
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(programmeEvents)
-    .orderBy(asc(programmeEvents.sort), asc(programmeEvents.eventDate));
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    eventDate: r.eventDate,
-    venue: r.venue,
-    description: r.description,
-    image: r.image,
-  }));
-}
-
 export async function getMetrics(): Promise<ProgrammeMetric[]> {
   const db = getDb();
   const rows = await db.select().from(programmeMetrics).orderBy(asc(programmeMetrics.sort));
@@ -142,22 +106,20 @@ export async function getMetrics(): Promise<ProgrammeMetric[]> {
   }));
 }
 
+/** The dashboard analytics cap the history they need; this keeps the payload bounded. */
+const BOOTSTRAP_EVENT_LIMIT = 1000;
+
 export async function getBootstrap(): Promise<BootstrapData> {
-  const [binRows, events, cleanerRows, news, eventsProgramme, metrics] =
-    await Promise.all([
-      getBins(),
-      getEvents(),
-      getCleaners(),
-      getNews(),
-      getProgrammeEvents(),
-      getMetrics(),
-    ]);
+  const [binRows, events, cleanerRows, metrics] = await Promise.all([
+    getBins(),
+    getEvents(BOOTSTRAP_EVENT_LIMIT),
+    getCleaners(),
+    getMetrics(),
+  ]);
   return {
     bins: binRows,
     events,
     cleaners: cleanerRows,
-    news,
-    programmeEvents: eventsProgramme,
     metrics,
   };
 }

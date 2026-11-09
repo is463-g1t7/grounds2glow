@@ -2,21 +2,6 @@
 export type LcdRect = { x: number; y: number; w: number; h: number };
 
 /**
- * Overhead illustrations of a floor scale for the landing page. `refKg` is what the LCD shows.
- * They show a full-size bin, so they aren't used as photos to weigh.
- */
-export const SCALE_FRAMES = [
-  { src: "/images/weighing_scale_1.jpeg", refKg: 4.2 },
-  { src: "/images/weighing_scale_2.jpeg", refKg: 5.7 },
-  { src: "/images/weighing_scale_3.jpeg", refKg: 8.3 },
-] as const;
-
-export type ScaleFrame = (typeof SCALE_FRAMES)[number];
-
-/** LCD window within the landing page's illustrations (fractions of width/height). */
-export const SCALE_LCD: LcdRect = { x: 0.425, y: 0.12, w: 0.15, h: 0.12 };
-
-/**
  * Sample photos of the prototype's real scale, for the weigh step. `refKg` is what the LCD shows
  * (the labelled fallback if OCR can't read it) and `lcd` is where the display is in the photo.
  * Add more photos at heavier readings so bins that already hold grounds have one to use.

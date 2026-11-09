@@ -7,8 +7,6 @@ const EMPTY: BootstrapData = {
   bins: [],
   events: [],
   cleaners: [],
-  news: [],
-  programmeEvents: [],
   metrics: [],
 };
 

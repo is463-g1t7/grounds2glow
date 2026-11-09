@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { KioskChat } from "@/components/kiosk/kiosk-chat";
+import { KioskChatDynamic } from "@/components/kiosk/lazy-kiosk-chat";
 import { StageMark } from "./shared";
 
 export function ChatbotSection() {
@@ -30,7 +30,7 @@ export function ChatbotSection() {
         </div>
 
         <div className="flex h-[620px] flex-col overflow-hidden rounded-[4px] border-t-4 border-smu-navy bg-white text-black shadow-lift lg:col-span-7">
-          <KioskChat embedded />
+          <KioskChatDynamic embedded />
         </div>
       </div>
     </section>
