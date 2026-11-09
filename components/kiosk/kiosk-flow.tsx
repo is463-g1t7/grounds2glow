@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import QRCode from "qrcode";
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,7 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { KioskChat } from "@/components/kiosk/kiosk-chat";
+import { KioskChatDynamic as KioskChat } from "./lazy-kiosk-chat";
 import { BarcodeViewfinder, ScanTips } from "@/components/scanner/barcode-viewfinder";
 import { lookupBarcode, useBarcodeScanner } from "@/lib/client/use-barcode-scanner";
 
@@ -365,14 +364,25 @@ function Guide({ name, onNext }: { name: string; onNext: () => void }) {
 
   useEffect(() => {
     const url = `${window.location.origin}/kiosk?chat=1`;
-    QRCode.toDataURL(url, {
-      color: { dark: "#141B4D", light: "#ffffff" },
-      errorCorrectionLevel: "M",
-      margin: 2,
-      width: 640,
-    })
-      .then(setQr)
-      .catch(() => setQr(""));
+    let cancelled = false;
+    void import("qrcode")
+      .then(({ default: QRCode }) =>
+        QRCode.toDataURL(url, {
+          color: { dark: "#141B4D", light: "#ffffff" },
+          errorCorrectionLevel: "M",
+          margin: 2,
+          width: 640,
+        }),
+      )
+      .then((dataUrl) => {
+        if (!cancelled) setQr(dataUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setQr("");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

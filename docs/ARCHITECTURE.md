@@ -93,8 +93,8 @@ The dashboard sends `POST /api/collect`. `collectBin()` locks the bin, rejects a
 
 ### 4.3 Live dashboard and landing page
 
-`GET /api/bootstrap` returns bins, events, cleaners, news, programme events and metrics. The landing
-page polls it every four seconds for the live demo. The dashboard does not poll: it fetches on open,
+`GET /api/bootstrap` returns bins, events (capped at 1,000), cleaners and metrics. The landing page
+polls it every four seconds for the live demo. The dashboard does not poll: it fetches on open,
 refreshes when the tab regains focus, and has an explicit Refresh button that adds `?refresh=1` to
 bypass the cache. Both show the snapshot's `updatedAt` time.
 
@@ -179,11 +179,12 @@ Two application rules are worth calling out here:
   prerendered shell, and `/cleaner/building`, `/cleaner/weigh`, `/dashboard` and `/kiosk` stream the
   dynamic remainder. All `/api/*` routes are dynamic.
 - `next/font` self-hosts Oswald and Libre Franklin at build time, avoiding runtime font requests.
-- `next/image` serves the landing images with responsive `sizes`; images are lazy by default, with
-  an eager/high-priority option in `ScaleReadout` for a hero-style image.
-- The barcode decoder is dynamically imported only when a camera starts, keeping it out of the
-  initial bundle. QR codes are generated locally with the `qrcode` package, not fetched from an
-  image service.
+- `next/image` serves the campus map with responsive `sizes` and lazy loading by default.
+- The barcode decoder is dynamically imported only when a camera starts, and the kiosk chat
+  (`react-markdown`/`remark-gfm`) is split into a dynamic chunk loaded after hydration on the
+  landing page or when the kiosk opens it. QR codes are generated locally on demand with the
+  `qrcode` package, not fetched from an image service.
+- Duplicate and unused public images were removed; the campus map is served through `next/image`.
 - Tailwind CSS is compiled at build time; icon imports come from `lucide-react` and are tree-shaken.
 - Chart animations are disabled and `prefers-reduced-motion` turns off transitions globally.
 - `useNow` wakes every 30 seconds and publishes a minute-rounded value, so it re-renders at most once
@@ -255,7 +256,7 @@ implemented from what is only a design target.
 | **Data efficiency** | Analytics and CSV export are computed client-side from the bootstrap payload. Reset reseeds and re-queries Postgres server-side but returns the fresh payload in the same response, avoiding a follow-up API call. | `lib/analytics.ts`, `lib/client/csv.ts`, `app/api/reset/route.ts` |
 | **Data minimisation** | No third-party analytics or tracking scripts. The barcode route does not log scanned values. Only the scale photo or a crop is sent to OCR. | `app/api/barcode/resolve/route.ts`; no analytics dependency in `package.json` |
 | **Database efficiency** | A small reused connection pool, targeted indexes, row-level locks and transactions avoid repeated connections and conflicting writes. Bootstrap runs six queries in parallel. | `lib/db.ts`, `db/schema.ts`, `getBootstrap()`/`createReading()`/`collectBin()` in `lib/queries.ts` |
-| **Asset efficiency** | Fonts are self-hosted at build time; landing images use `next/image` with responsive sizes and lazy loading by default; `prefers-reduced-motion` turns off transitions. | `app/layout.tsx`, `components/landing/shared.tsx`, `app/globals.css` |
+| **Asset efficiency** | Fonts are self-hosted at build time; the chat/markdown bundle and QR library load on demand; the campus map uses `next/image` with responsive sizes and lazy loading; `prefers-reduced-motion` turns off transitions. | `app/layout.tsx`, `components/smu/campus-map.tsx`, `components/kiosk/lazy-kiosk-chat.tsx`, `app/globals.css` |
 | **Longevity** | Migrations, a deterministic seed and a data-integrity check keep the prototype reproducible; the dependency set is small. | `db/migrations/`, `scripts/seed.ts`, `scripts/check-seed.ts` |
 
 ### 9.2 Design-stage carbon estimate
@@ -279,11 +280,10 @@ to be re-checked before it is quoted externally.
 
 ### 9.3 Known gaps and next steps
 
-- **Unbounded bootstrap payload.** `/api/bootstrap` returns every event, every cleaner (including
-  pass numbers) and the seeded news/programme tables even though the current UI does not surface
-  news or programme events. The seeded history alone is hundreds of events; the deployed payload was
-  measured at about 81 KB during the deployment audit and grows with every reading. Limit events to
-  the reporting window, project only the fields the UI needs, and remove the unused queries.
+- **Bootstrap payload and privacy.** The payload now caps events at 1,000 and no longer queries the
+  seeded news/programme tables, but it still returns every cleaner, including pass numbers, and up
+  to 1,000 events. Split the hot bin/status data from the cold analytics, project only the fields
+  each caller needs, and avoid sending real staff data.
 - **Polling cost.** The landing page still polls every four seconds while open. Pause polling when the
   tab is hidden or back off when the data is unchanged. The dashboard no longer polls, so most idle
   traffic is already gone.
@@ -293,12 +293,6 @@ to be re-checked before it is quoted externally.
 - **Legacy tables.** `listings` and `claims` are still in the schema and migrations. Dropping them
   reduces storage, backup size and migration time. `news_items` and `programme_events` can be removed
   once their seed data is no longer needed.
-- **Duplicate and oversized images.** `public/images/weighing_scale_*.jpeg` are about 3.3 MB each and
-  are duplicated at the `public/` root; the campus map is also duplicated. Several other images are
-  leftovers from removed news/programme sections. Keep one optimised copy of each asset.
-- **Landing bundle.** The landing page statically imports the kiosk chat, which brings
-  `react-markdown`, `remark-gfm` and the chat UI into the initial home route. Load it with
-  `next/dynamic` when it scrolls into view.
 - **OCR cold starts.** A sleeping PaddleOCR Space spends energy starting up. The hardware concept can
   read the load cell directly and remove cloud OCR entirely; until then, warm the Space only when a
   cleaner is actually at the station. The current timeout also does not abort the underlying Gradio

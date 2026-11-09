@@ -1,5 +1,3 @@
-import Image from "next/image";
-import { SCALE_LCD, type ScaleFrame } from "@/lib/scales";
 import type { BinEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -23,53 +21,5 @@ export function LiveDot({ className }: { className?: string }) {
       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-smu-success opacity-60" />
       <span className="relative inline-flex h-2 w-2 rounded-full bg-smu-success" />
     </span>
-  );
-}
-
-/** An overhead scale photo with the OCR lock drawn around its display. */
-export function ScaleReadout({
-  frame,
-  sizes,
-  eager = false,
-  className,
-  imageClassName,
-}: {
-  frame: ScaleFrame;
-  sizes: string;
-  eager?: boolean;
-  className?: string;
-  imageClassName?: string;
-}) {
-  return (
-    <div className={cn("relative aspect-[2752/1536] w-full", className)}>
-      <Image
-        src={frame.src}
-        alt={`Overhead view of a tub of used coffee grounds on a floor scale reading ${frame.refKg} kg`}
-        fill
-        sizes={sizes}
-        loading={eager ? "eager" : "lazy"}
-        fetchPriority={eager ? "high" : "auto"}
-        className={cn("object-cover", imageClassName)}
-      />
-      <span
-        aria-hidden="true"
-        className="ocr-lock absolute rounded-[3px] border-2 border-smu-success"
-        style={{
-          left: `${SCALE_LCD.x * 100}%`,
-          top: `${SCALE_LCD.y * 100}%`,
-          width: `${SCALE_LCD.w * 100}%`,
-          height: `${SCALE_LCD.h * 100}%`,
-        }}
-      />
-      <span
-        className="ocr-tag absolute whitespace-nowrap rounded-[3px] bg-smu-navy-deep px-2 py-1 text-[12px] font-semibold tabular-nums text-white"
-        style={{
-          left: `${(SCALE_LCD.x + SCALE_LCD.w) * 100 + 1.5}%`,
-          top: `${SCALE_LCD.y * 100}%`,
-        }}
-      >
-        OCR · {frame.refKg.toFixed(2)} kg
-      </span>
-    </div>
   );
 }

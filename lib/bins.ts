@@ -23,11 +23,3 @@ export function statusFor(weightKg: number, capacityKg = BIN_CAPACITY_KG): BinSt
   if (weightKg >= capacityKg * NEAR_FULL_RATIO) return "near";
   return "ok";
 }
-
-export function parseKgFromOcrText(text: string): number | null {
-  const m = text.match(/(\d+(?:\.\d+)?)\s*kg/i) ?? text.match(/(\d+\.\d+|\d+)/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  if (Number.isNaN(n)) return null;
-  return Math.min(BIN_CAPACITY_KG, Math.max(0, n));
-}

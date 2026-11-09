@@ -45,24 +45,6 @@ export type BinEvent = {
   photo?: string | null;
 };
 
-export type NewsItem = {
-  id: string;
-  title: string;
-  tag: string;
-  publishedAt: string;
-  image: string;
-  href: string;
-};
-
-export type ProgrammeEvent = {
-  id: string;
-  title: string;
-  eventDate: string;
-  venue: string;
-  description: string;
-  image: string;
-};
-
 export type ProgrammeMetric = {
   key: string;
   value: string;
@@ -75,8 +57,6 @@ export type BootstrapData = {
   bins: Bin[];
   events: BinEvent[];
   cleaners: Cleaner[];
-  news: NewsItem[];
-  programmeEvents: ProgrammeEvent[];
   metrics: ProgrammeMetric[];
   /** When this snapshot was read from Postgres (not when the browser fetched it). */
   updatedAt?: string;
