@@ -13,7 +13,7 @@ prototype is exposed more widely.
 | --- | --- | --- | --- |
 | Local | `bun run dev` on `http://localhost:3000` | Postgres 18 in Docker on `localhost:55432` | Development and demo rehearsal |
 | Preview | Manual `bunx vercel deploy` (no Git integration; no per-branch/PR previews) | Supabase (currently the production database) | Review builds |
-| Production | <https://prototype-one-green.vercel.app> | Supabase `eu-central-1` | Assessor demo |
+| Production | <https://grounds2glow.vercel.app> | Supabase `eu-central-1` | Assessor demo |
 
 The Vercel project is `prototype` under the `charles-personal` scope. This checkout is linked through
 the gitignored `.vercel/project.json`; a fresh clone has to run
@@ -146,9 +146,10 @@ work. The dashboard fetches on open, on tab focus and with the Refresh button; t
 sync/simulate and reset delete the key so the next read is fresh.
 
 Upstash has a free direct plan (250 MB, 500K commands/month), but the Vercel Marketplace integration
-currently offers only paid Pay As You Go or fixed plans. For this prototype the free direct database
-is enough; add its REST URL/token to Vercel manually. The cache stores the whole bootstrap payload,
-including demo cleaner pass numbers, for at most 15 seconds; do not put real staff data in it.
+currently offers only paid Pay As You Go or fixed plans. This prototype uses the free direct
+database; its REST URL/token are set for Production and Preview. The cache stores the whole
+bootstrap payload, including demo cleaner pass numbers, for at most 15 seconds; do not put real
+staff data in it.
 
 ## 5. Supabase
 
@@ -216,10 +217,9 @@ deploy workflow does **not** run migrations or seed; treat both as explicit rele
 is no `vercel.json`, so Vercel uses the Next.js preset defaults: no custom headers, redirects,
 crons or region override.
 
-Production has two aliases:
-
-- <https://prototype-one-green.vercel.app> (stable)
-- <https://prototype-charles-personal.vercel.app>
+Production alias: <https://grounds2glow.vercel.app>. The deployment-specific host
+`https://prototype-<deployment-id>-charles-personal.vercel.app` changes with each deploy; the old
+`prototype-one-green` alias no longer resolves.
 
 The Vercel project currently lives under a personal scope, and deploys use a personal
 `VERCEL_TOKEN`. Move the project to the team/org and use the native Git integration, or rotate the
@@ -310,8 +310,8 @@ $env:DIRECT_URL="postgresql://postgres.<project-ref>:<password>@aws-1-eu-central
 ## 8. Verification
 
 ```bash
-curl -s https://prototype-one-green.vercel.app/api/bootstrap | head -c 200
-curl -I https://prototype-one-green.vercel.app/
+curl -s https://grounds2glow.vercel.app/api/bootstrap | head -c 200
+curl -I https://grounds2glow.vercel.app/
 ```
 
 Expected production characteristics at the time of the deployment audit:
