@@ -1,3 +1,4 @@
+import { clearBootstrapCache } from "@/lib/cache";
 import { createReading } from "@/lib/queries";
 import type { EventSource } from "@/lib/types";
 
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     if (!event) {
       return Response.json({ error: "Reading is not above the bin's last total." }, { status: 409 });
     }
+    await clearBootstrapCache();
     return Response.json({ event }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to record reading.";

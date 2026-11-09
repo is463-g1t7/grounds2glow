@@ -124,16 +124,31 @@ running server does need `DATABASE_URL`; without it, `/api/bootstrap` returns 50
 | `OPENROUTER_API_KEY` | Optional | Set | Set | Server-side kiosk chat |
 | `HF_SPACE_ID` | Optional | Not set | Not set | Defaults to `kevansoon/PaddleOCR` |
 | `HF_TOKEN` | Optional | Not set | Not set | Only for a private OCR Space |
+| `UPSTASH_REDIS_REST_URL` | Optional | Set | Set | Enables the `/api/bootstrap` snapshot cache |
+| `UPSTASH_REDIS_REST_TOKEN` | Optional | Set | Set | Upstash REST token; keep server-side |
 | `NEXT_PUBLIC_DEMO_CONTROLS` | Optional | **Currently `true`** | **Currently `true`** | Client visibility is build-time; server guard is runtime |
 | `CRON_SECRET` | Not used | Not set | Set | Currently unreferenced; no cron exists |
 
-Production and Preview currently both have `DATABASE_URL`, `OPENROUTER_API_KEY` and
-`NEXT_PUBLIC_DEMO_CONTROLS`, and Preview reuses the production database. Keep the Preview values
-until Preview has its own Supabase database, then separate them.
+Production and Preview currently both have `DATABASE_URL`, `OPENROUTER_API_KEY`,
+`NEXT_PUBLIC_DEMO_CONTROLS` and the Upstash pair, and Preview reuses the production database. Keep
+the Preview values until Preview has its own Supabase database, then separate them.
 
 `NEXT_PUBLIC_*` values are inlined into the client bundle at build time. The server 403 guard reads
 `process.env.NEXT_PUBLIC_DEMO_CONTROLS` at runtime, so a runtime-only change can leave the UI and the
 API guard disagreeing. Rebuild and verify both after changing the value.
+
+### 4.1 Upstash cache
+
+`/api/bootstrap` caches a 15-second JSON snapshot in Upstash Redis when both REST variables are set.
+The cache is optional: without them the route reads Postgres on every request, and local builds still
+work. The dashboard fetches on open, on tab focus and with the Refresh button; the button adds
+`?refresh=1`, which bypasses the cache and writes a fresh snapshot. Deposits, collections, demo
+sync/simulate and reset delete the key so the next read is fresh.
+
+Upstash has a free direct plan (250 MB, 500K commands/month), but the Vercel Marketplace integration
+currently offers only paid Pay As You Go or fixed plans. For this prototype the free direct database
+is enough; add its REST URL/token to Vercel manually. The cache stores the whole bootstrap payload,
+including demo cleaner pass numbers, for at most 15 seconds; do not put real staff data in it.
 
 ## 5. Supabase
 

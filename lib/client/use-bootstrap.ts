@@ -26,24 +26,39 @@ export async function apiRequest<T>(url: string, init?: RequestInit): Promise<T>
   return data;
 }
 
+type RefreshOptions = {
+  /** Skip the Upstash snapshot and read Postgres directly. */
+  bypassCache?: boolean;
+};
+
 export function useBootstrap(pollMs = 0) {
   const [data, setData] = useState<BootstrapData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const mounted = useRef(true);
 
-  const refresh = useCallback(async () => {
-    try {
-      const next = await apiRequest<BootstrapData>("/api/bootstrap");
-      if (mounted.current) {
-        setData(next);
-        setError(null);
-      }
-      return next;
-    } catch (err) {
-      if (mounted.current) setError(err instanceof Error ? err.message : "Unable to load data.");
-      return null;
-    }
+  const replaceData = useCallback((next: BootstrapData) => {
+    setData(next);
+    setUpdatedAt(next.updatedAt ?? new Date().toISOString());
   }, []);
+
+  const refresh = useCallback(
+    async (options?: RefreshOptions) => {
+      const url = options?.bypassCache ? "/api/bootstrap?refresh=1" : "/api/bootstrap";
+      try {
+        const next = await apiRequest<BootstrapData>(url);
+        if (mounted.current) {
+          replaceData(next);
+          setError(null);
+        }
+        return next;
+      } catch (err) {
+        if (mounted.current) setError(err instanceof Error ? err.message : "Unable to load data.");
+        return null;
+      }
+    },
+    [replaceData],
+  );
 
   useEffect(() => {
     mounted.current = true;
@@ -57,5 +72,12 @@ export function useBootstrap(pollMs = 0) {
     };
   }, [pollMs, refresh]);
 
-  return { data: data ?? EMPTY, loading: data === null, error, refresh, setData };
+  return {
+    data: data ?? EMPTY,
+    loading: data === null,
+    error,
+    refresh,
+    setData: replaceData,
+    updatedAt,
+  };
 }

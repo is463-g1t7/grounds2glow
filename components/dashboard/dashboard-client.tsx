@@ -48,7 +48,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export function DashboardClient() {
-  const data = useBootstrap(4000);
+  const { data: snapshot, loading, error, refresh, setData, updatedAt } = useBootstrap();
   const params = useSearchParams();
   const [selectedId, setSelectedId] = useState(() => params.get("bin") ?? "bin-soe");
   const [range, setRange] = useState<Range>("7d");
@@ -57,12 +57,33 @@ export function DashboardClient() {
   const [toast, setToast] = useState<string | null>(null);
   const [liveId, setLiveId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const seenEvents = useRef<Set<string> | null>(null);
-  // Stable, so the 4-second poll re-rendering the page does not restart the toast's timer.
   const closeToast = useCallback(() => setToast(null), []);
 
-  const { bins, events, cleaners } = data.data;
+  const { bins, events, cleaners } = snapshot;
   const now = useNow();
+  const updatedLabel = updatedAt
+    ? new Date(updatedAt).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  const refreshNow = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh({ bypassCache: true });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
+
+  // Returning to the tab is a natural refresh point; no background polling needed.
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState === "visible") void refresh({ bypassCache: true });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refresh]);
 
   // Detect genuinely new cleaner drops from polling, not history on mount.
   useEffect(() => {
@@ -88,7 +109,7 @@ export function DashboardClient() {
     const timer = window.setInterval(async () => {
       try {
         await apiRequest("/api/simulate", { method: "POST" });
-        await data.refresh();
+        await refresh();
       } catch {
         setDemoOn(false);
       }
@@ -120,7 +141,7 @@ export function DashboardClient() {
   const shortOf = (id: string) => bins.find((b) => b.id === id)?.short ?? id;
   const topPantry = pantriesByKg(events, shortOf, w)[0];
 
-  if (data.loading) {
+  if (loading) {
     return (
       <Shell>
         <p className="mt-3 text-[18px] text-smu-muted">Loading bin telemetry…</p>
@@ -133,7 +154,7 @@ export function DashboardClient() {
     return (
       <Shell>
         <p className="mt-3 text-[18px] text-smu-muted">No bins found. Run the database seed script to load the demo data.</p>
-        {data.error && <p className="mt-2 text-sm text-smu-danger">{data.error}</p>}
+        {error && <p className="mt-2 text-sm text-smu-danger">{error}</p>}
       </Shell>
     );
   }
@@ -151,7 +172,7 @@ export function DashboardClient() {
     if (!b || b.weightKg <= 0) return;
     try {
       await apiRequest("/api/collect", { method: "POST", body: JSON.stringify({ binId: id }) });
-      await data.refresh();
+      await refresh();
       setToast(`${b.short}: ${kg(b.weightKg)} logged as repurposed by ${COLLECTOR_LABEL}.`);
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Unable to collect bin.");
@@ -161,7 +182,7 @@ export function DashboardClient() {
   async function syncFromServer() {
     try {
       await apiRequest("/api/sync", { method: "POST" });
-      await data.refresh();
+      await refresh();
       setSyncedAt(new Date().toLocaleTimeString());
       setToast("Synced one new floor-scale reading.");
     } catch (error) {
@@ -175,7 +196,7 @@ export function DashboardClient() {
     setLiveId(null);
     try {
       const next = await apiRequest<BootstrapData>("/api/reset", { method: "POST" });
-      data.setData(next);
+      setData(next);
       seenEvents.current = new Set(next.events.map((e) => e.id));
       setToast("Demo data reset to seed values.");
     } catch (error) {
@@ -214,13 +235,22 @@ export function DashboardClient() {
         crumbs={[{ label: "Home", href: "/" }, { label: "Live dashboard" }]}
         actions={
           <>
-            <span className="inline-flex items-center gap-2 rounded-full border border-smu-success/30 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#287a28]">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-smu-success opacity-60" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-smu-success" />
-              </span>
-              Live
+            <span
+              className="inline-flex items-center gap-2 rounded-full border border-smu-success/30 bg-white px-3 py-1.5 text-[12px] font-semibold text-[#287a28]"
+              aria-live="polite"
+            >
+              <span className="h-2 w-2 rounded-full bg-smu-success" />
+              {updatedLabel ? `Updated ${updatedLabel}` : "Loading"}
             </span>
+            <button
+              type="button"
+              onClick={refreshNow}
+              disabled={refreshing}
+              className="btn-smu btn-smu-outline btn-smu-sm disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden />
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
             {demoControlsEnabled && (
               <details className="group relative">
                 <summary className="btn-smu btn-smu-outline btn-smu-sm list-none [&::-webkit-details-marker]:hidden">

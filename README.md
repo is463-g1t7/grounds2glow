@@ -49,6 +49,11 @@ are in [Deployment](docs/DEPLOYMENT.md). In short, `bun run db:up`, `db:migrate`
 readout. Leave it unset on shared deployments: anyone who can reach the site could otherwise reset
 the shared demo data and destroy readings collected during the demo.
 
+The dashboard cache is optional. If `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are
+set, `/api/bootstrap` caches a 15-second snapshot in Upstash Redis; otherwise it reads Postgres
+directly. The dashboard refreshes on open, on tab focus and with the Refresh button, which bypasses
+the cache.
+
 ## Verify
 
 ```bash

@@ -48,8 +48,10 @@ is a design concept, not part of this deployment.
 | OpenRouter | LLM fallback for kiosk chat (`z-ai/glm-5.3-flash`). |
 
 The browser and the Next.js server are separate runtimes even though one repository builds both.
-Most data surfaces fetch `/api/bootstrap` from client components because the dashboard and landing
-page poll for live readings; static route shells are prerendered where possible.
+Most data surfaces fetch `/api/bootstrap` from client components. The landing page polls it for the
+live demo; the dashboard fetches on open, on tab focus and on demand. The route caches a 15-second
+snapshot in Upstash Redis when configured, so repeated landing polls do not hit Postgres. Static
+route shells are prerendered where possible.
 
 ## 3. Components
 
@@ -92,10 +94,16 @@ The dashboard sends `POST /api/collect`. `collectBin()` locks the bin, rejects a
 ### 4.3 Live dashboard and landing page
 
 `GET /api/bootstrap` returns bins, events, cleaners, news, programme events and metrics. The landing
-page and dashboard call it every four seconds while they are open; the cleaner flow and kiosk do not
-poll continuously. New events are detected by comparing event IDs, so the live toast only fires for
-cleaner-attributed deposits with a source of `ocr`, `reference` or `manual` that arrive after mount;
-sync, demo and collection events do not toast.
+page polls it every four seconds for the live demo. The dashboard does not poll: it fetches on open,
+refreshes when the tab regains focus, and has an explicit Refresh button that adds `?refresh=1` to
+bypass the cache. Both show the snapshot's `updatedAt` time.
+
+Without Redis, every request queries Postgres. With Upstash configured, the route returns a cached
+snapshot for up to 15 seconds; a cache miss (or a bypass) reads Postgres, stamps `updatedAt` and
+writes the snapshot back. Deposits, collections, demo sync/simulate and reset delete the key, so a
+manual refresh after a write sees the new reading. New events are detected by comparing event IDs,
+so the live toast only fires for cleaner-attributed deposits with a source of `ocr`, `reference` or
+`manual` that arrive after mount; sync, demo and collection events do not toast.
 
 ### 4.4 Kiosk chat
 
@@ -183,9 +191,10 @@ Two application rules are worth calling out here:
 - The database pool is created lazily and reused globally (`max: 5`, `idleTimeoutMillis: 30_000`), so
   importing a route during `next build` does not require credentials and serverless instances do not
   open a new pool per request.
-- Live reads use `cache: "no-store"` because stale bin weights would be wrong. Static assets and
-  fonts use the framework's normal caching. There is no server-side data cache today; see the gaps in
-  the green computing section.
+- Live reads use `cache: "no-store"` in the browser because stale bin weights would be wrong. The
+  server adds a 15-second Upstash snapshot cache in front of Postgres for `/api/bootstrap`; a
+  `?refresh=1` request bypasses it, and writes delete the key. Static assets and fonts use the
+  framework's normal caching.
 
 ## 8. Security, privacy and reliability
 
@@ -237,7 +246,7 @@ implemented from what is only a design target.
 | --- | --- | --- |
 | **Carbon efficiency** | One shared Next.js deployment and one managed database instead of a server per bin or building. Vercel runs the app on demand rather than keeping an always-on VM for the prototype. | `next.config.ts`, `.github/workflows/deploy.yml`; seven shared bins in `scripts/seed.ts` |
 | **Energy efficiency** | Deterministic kiosk answers avoid an LLM call for common questions. OCR runs only when a cleaner weighs a bin, not on a timer. Photos are cropped and downscaled before upload. | `getBuiltInGuidance()` in `components/kiosk/kiosk-chat.tsx`; `MAX_SIDE = 1600` and JPEG quality 0.9 in `lib/client/scale-ocr.ts` |
-| **Energy efficiency** | Live polling is limited to the two surfaces that need it (landing and dashboard), at a four-second interval. The cleaner and kiosk screens do not poll continuously. | `useBootstrap(4000)` in `app/(site)/page.tsx` and `components/dashboard/dashboard-client.tsx` |
+| **Energy efficiency** | Live polling is limited to the landing demo; the dashboard refreshes on open, tab focus and an explicit button. The 15-second Upstash snapshot absorbs repeated landing polls and cuts Postgres reads. | `app/(site)/page.tsx`; `components/dashboard/dashboard-client.tsx`; `lib/cache.ts` |
 | **Energy efficiency** | The barcode decoder is dynamically imported only when a camera starts, chart animations are disabled, and `useNow` wakes every 30 seconds to publish a minute-rounded value. | `lib/client/use-barcode-scanner.ts`, `components/ui/chart-card.tsx`, `lib/client/use-now.ts` |
 | **Hardware efficiency** | The browser supplies the camera and barcode detector, so the prototype needs no dedicated scanner hardware for the demo. QR codes are generated locally rather than fetched. | `lib/client/use-barcode-scanner.ts`, `lib/client/camera.ts`, `lib/client/use-qr.ts` |
 | **Hardware efficiency** | Local development uses one Docker Postgres container; production uses managed Supabase rather than a dedicated database VM. | `docker-compose.yml`, `lib/db.ts` |
@@ -275,12 +284,12 @@ to be re-checked before it is quoted externally.
   news or programme events. The seeded history alone is hundreds of events; the deployed payload was
   measured at about 81 KB during the deployment audit and grows with every reading. Limit events to
   the reporting window, project only the fields the UI needs, and remove the unused queries.
-- **Polling cost.** The landing page and dashboard poll every four seconds while open. Pause polling
-  when the tab is hidden, back off when the data is unchanged, or move to server-sent events. This
-  removes most idle traffic without changing the live experience.
-- **No data cache.** `cache: "no-store"` is correct for live bin weights, but the bootstrap response
-  has no short server-side cache, ETag or conditional request. A one- or two-second cache would cut
-  duplicate work when several assessor tabs are open.
+- **Polling cost.** The landing page still polls every four seconds while open. Pause polling when the
+  tab is hidden or back off when the data is unchanged. The dashboard no longer polls, so most idle
+  traffic is already gone.
+- **Cache granularity and privacy.** The 15-second cache stores the whole bootstrap payload, including
+  the demo cleaner pass list, and a single key serves every caller. Split the hot bin/status data from
+  the cold analytics, cache only fields the caller needs, and avoid caching real staff data.
 - **Legacy tables.** `listings` and `claims` are still in the schema and migrations. Dropping them
   reduces storage, backup size and migration time. `news_items` and `programme_events` can be removed
   once their seed data is no longer needed.
