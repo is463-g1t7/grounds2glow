@@ -116,6 +116,15 @@
     }
   }
 
+  /* Angled join between stacked sections. The section is cut on a slant and tucked over the
+     next one, which needs a lower z-index than this section. Padding stays larger than the slant. */
+  .section-slant {
+    --slant: clamp(28px, 3.6vw, 60px);
+    position: relative;
+    margin-bottom: calc(var(--slant) * -1 - 1px);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--slant)), 0 100%);
+  }
+
   .eyebrow {
     font-family: var(--font-display);
     font-size: 17.6px;
