@@ -5,13 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import {
   CheckCircle2,
-  ImageIcon,
   Keyboard,
   RefreshCw,
+  ScanLine,
   ScanText,
   Smartphone,
   Truck,
-  Upload,
 } from "lucide-react";
 import { BoxOverlay } from "@/components/smu/box-overlay";
 import { levelsFor } from "@/lib/bins";
@@ -29,7 +28,7 @@ import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import { useVisitKey } from "@/lib/client/use-visit-key";
 import type { OcrLine } from "@/lib/languages";
 import { toKg, type ScaleUnit } from "@/lib/scale-reading";
-import { pickFrame } from "@/lib/scales";
+import { pickFrame, SAMPLE_FRAMES } from "@/lib/scales";
 import type { BinEvent, EventSource } from "@/lib/types";
 import { CleanerShell, LoadingPanel, NeedsPass, Panel } from "./cleaner-shell";
 
@@ -48,9 +47,101 @@ type Phase =
 
 /**
  * Where the photo of the scale comes from. A phone at the bin will send it later;
- * until then a sample photo or an uploaded one stands in.
+ * until then a sample photo or an uploaded one stands in. A "demo" read has no real photo:
+ * it borrows the sample photo for the animation, and the weight is the one the presenter chose.
  */
-type Source = "sample" | "upload";
+type Source = "sample" | "upload" | "demo";
+
+const SEGMENTS: Record<string, string> = {
+  "0": "abcdef",
+  "1": "bc",
+  "2": "abdeg",
+  "3": "abcdg",
+  "4": "bcfg",
+  "5": "acdfg",
+  "6": "acdefg",
+  "7": "abc",
+  "8": "abcdefg",
+  "9": "abcdfg",
+};
+/** x, y, width, height of each segment in a digit that is 10 wide and 24 tall. */
+const SEGMENT_RECTS: Record<string, readonly [number, number, number, number]> = {
+  a: [1.9, 0, 6.2, 2.4],
+  b: [7.6, 1.9, 2.4, 9.2],
+  c: [7.6, 12.9, 2.4, 9.2],
+  d: [1.9, 21.6, 6.2, 2.4],
+  e: [0, 12.9, 2.4, 9.2],
+  f: [0, 1.9, 2.4, 9.2],
+  g: [1.9, 10.8, 6.2, 2.4],
+};
+const LCD_INK = "#7d82ee";
+
+/**
+ * Demo reads: the weight written onto the sample photo's display in the same slanted
+ * seven-segment style, over the original digits, so what the photo shows is what gets logged.
+ */
+function DemoDisplay({ lcd, kg: value }: { lcd: Rect; kg: number }) {
+  const text = value.toFixed(3);
+  const skew = 3.4;
+  let x = 0;
+  const parts: ReactNode[] = [];
+  for (const ch of text) {
+    if (ch === ".") {
+      parts.push(<rect key={`dot-${x}`} x={x + 1} y={21.6} width={2.6} height={2.4} rx={0.6} fill={LCD_INK} />);
+      x += 5;
+      continue;
+    }
+    const lit = SEGMENTS[ch] ?? "";
+    for (const seg of "abcdefg") {
+      const [sx, sy, sw, sh] = SEGMENT_RECTS[seg];
+      parts.push(
+        <rect
+          key={`${x}-${seg}`}
+          x={x + sx}
+          y={sy}
+          width={sw}
+          height={sh}
+          rx={0.8}
+          fill={LCD_INK}
+          opacity={lit.includes(seg) ? 1 : 0.07}
+        />
+      );
+    }
+    x += 13;
+  }
+  return (
+    <div
+      className="absolute"
+      style={{
+        left: `${(lcd.x - 0.004) * 100}%`,
+        top: `${(lcd.y - 0.006) * 100}%`,
+        width: `${(lcd.w + 0.008) * 100}%`,
+        height: `${(lcd.h + 0.011) * 100}%`,
+        borderRadius: "4% / 10%",
+        background: "linear-gradient(180deg, #d9dbee 0%, #c6c9e4 100%)",
+        containerType: "size",
+      }}
+    >
+      <span
+        className="absolute font-bold leading-none"
+        style={{ left: "3.5%", top: "9%", fontSize: "18cqh", color: LCD_INK }}
+      >
+        kg
+      </span>
+      <svg
+        viewBox={`0 0 ${x - 3 + skew} 24`}
+        preserveAspectRatio="xMaxYMid meet"
+        className="absolute"
+        style={{ right: "7%", top: "12%", width: "69%", height: "76%" }}
+      >
+        <g transform={`translate(${skew} 0) skewX(-8)`}>{parts}</g>
+      </svg>
+    </div>
+  );
+}
+
+/** Demo mode: grounds a presenter can add in one tap. The scale then shows the bin's new total. */
+const DEMO_ADDS_KG = [0.5, 1, 2];
 
 /** The photo being read. `crop` is the part sent to OCR, or null for the whole photo. */
 type Shot = {
@@ -63,6 +154,8 @@ type Shot = {
   /** Saved with the reading so the audit trail can link to it. Only sample photos have a URL. */
   photo: string | null;
   source: Source;
+  /** Demo reads only: the weight drawn onto the scale's display, so the photo matches the reading. */
+  displayKg?: number;
 };
 
 type Size = { width: number; height: number };
@@ -356,6 +449,46 @@ function WeighStationVisit() {
     await readShot(next, image, binKg, live);
   }
 
+  /**
+   * Demo mode: plays the same find-the-display animation on the sample photo, then logs the
+   * weight the presenter chose instead of reading the photo. It's saved as a "demo" reading.
+   */
+  async function runDemo(addKg: number) {
+    const live = newRun();
+    clearResult();
+    setBeforeKg(binKg);
+    const total = Math.round((binKg + addKg) * 1000) / 1000;
+    const frame = SAMPLE_FRAMES[0];
+    const next: Shot = {
+      src: frame.src,
+      crop: null,
+      refKg: null,
+      lcd: frame.lcd,
+      photo: null,
+      source: "demo",
+      displayKg: total,
+    };
+    setShot(next);
+    setPhase("aligning");
+    const [image] = await Promise.all([loadImage(frame.src).catch(() => null), sleep(1200)]);
+    if (!live()) return;
+    if (!image) {
+      setError("The sample photo didn't load. Check the connection and try again.");
+      setPhase("failed");
+      return;
+    }
+    imageRef.current = image;
+    setSize(imageSize(image));
+    setPhase("locked");
+    await sleep(700);
+    if (!live()) return;
+    setPhase("captured");
+    await sleep(400);
+    if (!live()) return;
+    setRead(total);
+    await save(total, "demo", null);
+  }
+
   async function onUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -395,6 +528,8 @@ function WeighStationVisit() {
   function retake() {
     if (shot?.source === "sample") {
       void runSample(shot.src);
+    } else if (shot?.source === "demo") {
+      backToStart();
     } else {
       backToStart();
       chooseUpload();
@@ -463,6 +598,37 @@ function WeighStationVisit() {
     </button>
   );
 
+  const demoChips = demo ? (
+    <div className="rounded border border-dashed border-black/25 p-3">
+      <p className="text-[14px] font-semibold text-black/70">Demo · weight to read</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {DEMO_ADDS_KG.map((add) => {
+          const total = Math.round((binKg + add) * 1000) / 1000;
+          const fits = total <= bin.capacityKg;
+          return (
+            <button
+              key={add}
+              type="button"
+              disabled={!fits}
+              onClick={() => void runDemo(add)}
+              title={
+                fits
+                  ? `The scale will show ${kg(total)} in total`
+                  : `More than the bin holds (${kg(bin.capacityKg)})`
+              }
+              className="btn-smu btn-smu-outline btn-smu-sm disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              +{kg(add)}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[13px] leading-5 text-black/60">
+        Added to the {kg(binKg)} already in the bin, and logged as a demo reading.
+      </p>
+    </div>
+  ) : null;
+
   let panel: ReactNode;
   if (phase === "choose" && full) {
     panel = (
@@ -485,24 +651,30 @@ function WeighStationVisit() {
   } else if (phase === "choose") {
     panel = (
       <>
-        <PanelTitle>Photograph the scale display</PanelTitle>
+        <PanelTitle>Choose how to read the scale</PanelTitle>
         {justSwapped && <SwapReminder />}
         <p className="cleaner-body">
-          Put the bin on the scale, then send a photo of the display. The weight is logged
-          automatically.
+          Put the bin on the scale, then pick an option. The weight is logged automatically.
         </p>
         <div className="flex flex-col gap-3">
           <button
             type="button"
             onClick={() => void runSample()}
+            title="Reads a sample photo of the scale display"
             className="btn-smu btn-smu-gold cleaner-action"
           >
-            <ImageIcon className="h-5 w-5" /> Use a sample photo
+            <ScanLine className="h-5 w-5" /> Read the scale
           </button>
-          <button type="button" onClick={chooseUpload} className="btn-smu btn-smu-outline cleaner-action">
-            <Upload className="h-5 w-5" /> Upload a photo
+          <button
+            type="button"
+            onClick={chooseUpload}
+            title="Reads a photo you choose from this device"
+            className="btn-smu btn-smu-outline cleaner-action"
+          >
+            <ScanText className="h-5 w-5" /> OCR scan
           </button>
         </div>
+        {demoChips}
         {typeButton}
       </>
     );
@@ -695,12 +867,12 @@ function WeighStationVisit() {
       <>
         <PanelTitle>No sample photo fits this bin</PanelTitle>
         <p className="cleaner-body">
-          The bin already holds {kg(before)}, more than any sample photo shows. Upload a photo,
+          The bin already holds {kg(before)}, more than any sample photo shows. Use OCR scan,
           type the weight, or swap in an empty bin.
         </p>
         <div className="flex flex-col gap-3">
           <button type="button" onClick={chooseUpload} className="btn-smu btn-smu-gold cleaner-action">
-            <Upload className="h-5 w-5" /> Upload a photo
+            <ScanText className="h-5 w-5" /> OCR scan
           </button>
           <button
             type="button"
@@ -711,6 +883,7 @@ function WeighStationVisit() {
             <Truck className="h-5 w-5" /> {swapping ? "Logging swap…" : "I've swapped in an empty bin"}
           </button>
         </div>
+        {demoChips}
         {typeButton}
       </>
     );
@@ -793,11 +966,28 @@ function WeighStationVisit() {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={shot.src}
-          alt={shot.source === "sample" ? "Sample photo of the scale" : "Photo of the scale"}
+          alt={
+            shot.source === "demo" && shot.displayKg != null
+              ? `Demo: the scale display reads ${shot.displayKg.toFixed(3)} kg`
+              : shot.source !== "upload"
+                ? "Sample photo of the scale"
+                : "Photo of the scale"
+          }
           className={`block h-auto w-full transition-[filter,transform] duration-[1200ms] ease-out ${
             phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
           }`}
         />
+      )}
+
+      {shot.source === "demo" && shot.displayKg != null && shot.lcd && (
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-0 transition-[filter,transform] duration-[1200ms] ease-out ${
+            phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
+          }`}
+        >
+          <DemoDisplay lcd={shot.lcd} kg={shot.displayKg} />
+        </div>
       )}
 
       {(phase === "aligning" || phase === "locked") && shot.lcd && (
@@ -834,6 +1024,12 @@ function WeighStationVisit() {
         </div>
       )}
 
+      {shot.source === "demo" && (
+        <p className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/65 px-3 py-2 text-[13px] text-white">
+          Demo reading · display set to {shot.displayKg?.toFixed(3)} kg
+        </p>
+      )}
+
       {phase === "captured" && <span className="shutter pointer-events-none absolute inset-0 bg-white" />}
     </div>
   ) : (
@@ -854,8 +1050,8 @@ function WeighStationVisit() {
       </p>
       {!typedByHand && !(full && phase === "choose") && (
         <p className="max-w-md text-[16px] leading-6 text-white/70">
-          The phone at this bin will send it here. Until that&apos;s set up, use a sample photo or
-          upload one.
+          The phone at this bin will send it here. Until that&apos;s set up, use Read the scale (a
+          sample photo) or OCR scan (a photo you choose).
         </p>
       )}
     </div>
@@ -864,7 +1060,7 @@ function WeighStationVisit() {
   // ----- Demo-only details for assessors -----
 
   const pipeline: Array<[string, string | null, boolean]> = [
-    ["Photo", shot ? (shot.source === "sample" ? "sample photo" : "uploaded") : null, shot != null && !busy],
+    ["Photo", shot ? (shot.source === "sample" ? "sample photo" : shot.source === "demo" ? "stand-in sample photo" : "uploaded") : null, shot != null && !busy],
     [
       "OCR",
       phase === "ocr"

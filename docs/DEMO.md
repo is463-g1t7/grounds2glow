@@ -24,7 +24,7 @@ about **1 min 2 s**, and each spoken line fits the time its action takes.
 | 5 | 0:22–0:27 | 5 s | Move the mouse slowly across the level buttons. | "Each level shows when its pantry last dropped off grounds." |
 | 6 | 0:27–0:31 | 4 s | Click **Level 2**. | "These came from Level 2, so one click." |
 | 7 | 0:31–0:40 | 9 s | Weigh page loads. Move the mouse over the waiting panel. | "The bin goes on the scale. In this demo, the station reads a sample photo of the display." |
-| 8 | 0:40–0:46 | 6 s | Click **Use a sample photo**, then wait. | "Reading the scale: find the display, capture it, read the digits, and log it." |
+| 8 | 0:40–0:46 | 6 s | Click **Read the scale**, then wait. | "Reading the scale: find the display, capture it, read the digits, and log it." |
 | 9 | 0:46–0:53 | 7 s | Saved screen appears by itself. Point down the From, Bin now, By and How rows. | "Logged automatically: the amount, the pantry, who made it, and how it was read, all on one audit record." |
 | 10 | 0:53–0:59 | 6 s | Point at **Log another level**, then click **Done, sign out** as you finish speaking. | "Another level, or done. Signing out hands the station to the next cleaner." |
 | 11 | 0:59–1:02 | 3 s | Check-in page is back and the camera restarts by itself. | "Ready for the next drop-off." |
@@ -37,5 +37,10 @@ about **1 min 2 s**, and each spoken line fits the time its action takes.
   different photo. Practise only as far as step 7 if you can.
 - **The display says 0.129 but the screen says 129 g.** They are the same weight.
 - **If OCR is slow in step 8,** stay quiet and trim the wait when editing.
+- **Demo weights.** With demo mode on (`?demo=1`), the weigh page shows **+500 g**, **+1 kg** and
+  **+2 kg** under the two options. Each plays the find-the-display animation on the sample photo,
+  draws the new total onto the scale's display, then logs that much on top of what the bin already
+  holds as a "Demo reading". Use them when the bin already holds more than the sample photo's
+  129 g. They're hidden with `?demo=0`, so keep that for the recorded take.
 - **Timings are estimates** at about 2.5 spoken words per second, so do one practice run with a
   stopwatch.
