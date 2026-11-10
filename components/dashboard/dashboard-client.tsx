@@ -95,7 +95,7 @@ export function DashboardClient() {
     const fresh = events.filter((e) => !seenEvents.current?.has(e.id));
     for (const e of fresh) seenEvents.current.add(e.id);
     const live = fresh.find(
-      (e) => e.type === "deposit" && (e.source === "ocr" || e.source === "reference" || e.source === "manual") && e.cleanerId
+      (e) => e.type === "deposit" && (e.source === "ocr" || e.source === "reference" || e.source === "manual" || e.source === "demo") && e.cleanerId
     );
     if (!live) return;
     const who = cleaners.find((c) => c.id === live.cleanerId)?.name ?? "A cleaner";
