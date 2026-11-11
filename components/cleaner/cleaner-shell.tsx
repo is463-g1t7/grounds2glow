@@ -22,7 +22,8 @@ export function CleanerShell({
   pauseIdle = false,
   children,
 }: {
-  step: 1 | 2 | 3;
+  /** The drop-off step this page is. Setup pages leave it out. */
+  step?: 1 | 2 | 3;
   cleaner?: Cleaner;
   /** The bin this drop-off is for, shown under the title. */
   where?: string;
@@ -61,7 +62,7 @@ export function CleanerShell({
             </div>
           </div>
 
-          <Steps step={step} />
+          {step ? <Steps step={step} /> : <span className="flex-1" />}
 
           <div className="ml-auto flex items-center gap-3">
             {demo && (

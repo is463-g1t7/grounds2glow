@@ -29,6 +29,14 @@ about **1 min 2 s**, and each spoken line fits the time its action takes.
 | 10 | 0:53–0:59 | 6 s | Point at **Log another level**, then click **Done, sign out** as you finish speaking. | "Another level, or done. Signing out hands the station to the next cleaner." |
 | 11 | 0:59–1:02 | 3 s | Check-in page is back and the camera restarts by itself. | "Ready for the next drop-off." |
 
+## Recording with the phone camera
+
+If a phone is paired with the laptop (`/cleaner/pair` on the laptop, `/cleaner/camera` on the
+phone), step 6 does the work of steps 7 and 8: clicking **Level 2** makes the phone count down from
+3, take the photo and read it, and the laptop shows the photo and saves the reading by itself.
+Say step 7's line while the phone counts down ("The phone at the bin takes the photo…"), and skip
+the **Read the scale** click. Without a paired phone, the script above is unchanged.
+
 ## Good to know
 
 - **Each take saves a real reading.** Step 8 writes 129 g to the shared database as soon as the

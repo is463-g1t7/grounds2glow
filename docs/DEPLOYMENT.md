@@ -124,7 +124,7 @@ running server does need `DATABASE_URL`; without it, `/api/bootstrap` returns 50
 | `OPENROUTER_API_KEY` | Optional | Set | Set | Server-side kiosk chat |
 | `HF_SPACE_ID` | Optional | Not set | Not set | Defaults to `kevansoon/PaddleOCR` |
 | `HF_TOKEN` | Optional | Not set | Not set | Only for a private OCR Space |
-| `UPSTASH_REDIS_REST_URL` | Optional | Set | Set | Enables the `/api/bootstrap` snapshot cache |
+| `UPSTASH_REDIS_REST_URL` | Optional | Set | Set | Bootstrap cache; **required on Vercel for the phone camera** |
 | `UPSTASH_REDIS_REST_TOKEN` | Optional | Set | Set | Upstash REST token; keep server-side |
 | `NEXT_PUBLIC_DEMO_CONTROLS` | Optional | **Currently `true`** | **Currently `true`** | Client visibility is build-time; server guard is runtime |
 | `CRON_SECRET` | Not used | Not set | Set | Currently unreferenced; no cron exists |
@@ -149,6 +149,18 @@ sync/simulate and reset delete the key so the next read is fresh.
 OpenRouter answers for 24 hours. A hit returns without calling the LLM and reports
 `x-answer-cache: HIT`; a miss calls OpenRouter and stores the answer. Bump the
 `smu-circular-coffee:kiosk-answer:v1` prefix when the system prompt changes.
+
+The phone camera relay (`/api/capture/*`, see ARCHITECTURE.md section 4.7) keeps pairing codes,
+sessions and capture jobs in the same database under `smu-circular-coffee:capture:v1:*`. Unlike
+the caches it is not optional on Vercel: without the REST variables the routes return 503, because
+function instances don't share memory. Locally, without them, it uses an in-memory store on the dev
+server. A phone with its camera page open uses about 4,200 commands an hour, so on the free plan
+close the page (or let it pause after 15 idle minutes) when it isn't needed.
+
+**Setting up a bin.** On the laptop, open `/cleaner/pair` and choose **Pair a phone**. On the phone,
+scan the QR code (or open `/cleaner/camera` and type the code), then tap **Switch the camera on**
+and keep the page open with the scale display inside the dashed frame. Both must use the same
+deployment URL. Camera access needs HTTPS, which Vercel provides.
 
 Upstash has a free direct plan (250 MB, 500K commands/month), but the Vercel Marketplace integration
 currently offers only paid Pay As You Go or fixed plans. This prototype uses the free direct

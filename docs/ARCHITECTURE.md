@@ -77,9 +77,10 @@ route shells are prerendered where possible.
    typed pass number. `POST /api/barcode/resolve` looks up `cleaners.pass`.
 2. `/cleaner/building` shows the building's pantry levels. The station bin is remembered in
    `localStorage` after a one-time `?station=<bin-id>` setup.
-3. `/cleaner/weigh` obtains a scale photo: sample frame, uploaded image or typed weight. The browser
-   crops and downscales the photo, then `POST /api/ocr/scale` sends it to the OCR Space and parses the
-   reading with `lib/scale-reading.ts`.
+3. `/cleaner/weigh` obtains a scale photo: from the paired phone camera (section 4.7), a sample
+   frame, an uploaded image, or a typed weight. The browser crops and downscales the photo, then
+   `POST /api/ocr/scale` sends it to the OCR Space and parses the reading with
+   `lib/scale-reading.ts`.
 4. `POST /api/readings` calls `createReading()`. Inside one transaction it locks the bin row
    (`SELECT ... FOR UPDATE`), clamps `afterKg` to `[0, capacity_kg]`, rejects a reading that is not
    above the current total, stores a `deposit` event with `before_kg`/`after_kg`, and updates the bin
@@ -147,6 +148,32 @@ Otherwise `POST /api/reset`, `POST /api/sync` and `POST /api/simulate` return 40
 database from `scripts/seed.ts`; Sync inserts one random reading; Simulate inserts a reading and
 auto-collects the oldest full bin when two bins are full.
 
+### 4.7 Phone camera
+
+A phone on a stand at the bin photographs the scale for the laptop. Both run the same Vercel
+deployment.
+
+1. **Pairing (once).** `/cleaner/pair` on the laptop calls `POST /api/capture/pair` and shows a
+   six-digit code and a QR code. The phone opens `/cleaner/camera` (the QR code fills the code in)
+   and calls `POST /api/capture/join`. Both devices then hold the same random session secret in
+   `localStorage` and send it as `x-capture-session`. Codes last 10 minutes, work once, and joining
+   locks for an address after 20 wrong codes. Sessions last 7 days after the last capture.
+2. **Trigger.** Picking a level opens `/cleaner/weigh`, which posts a capture job
+   (`POST /api/capture/job`) when a phone is paired.
+3. **Capture.** The phone checks `GET /api/capture/phone` every 1.2 s (every fifth check is also a
+   heartbeat). It claims the job, counts down 3 s, grabs a frame, posts a preview JPEG
+   (`captured`), runs `/api/ocr/scale` on the framed area, and posts the lines and reading
+   (`result`), or `failed`.
+4. **Save.** The laptop polls `GET /api/capture/job?id=` every second, shows the preview, then runs
+   the same checks as any other photo and saves through `POST /api/readings`. The photo is not
+   stored (`photo: null`).
+
+Vercel functions can't hold connections open, so both sides poll. Jobs live in Upstash Redis under
+`smu-circular-coffee:capture:v1:*` with TTLs (3 minutes per job); nothing touches Postgres until the
+laptop saves. Without Redis, a local dev server uses an in-memory store; on Vercel the relay returns
+503 instead, since memory isn't shared between function instances. The phone pauses after 15 idle
+minutes and stops polling while its page is hidden, to keep within Upstash's free command quota.
+
 ## 5. Data model
 
 The full Mermaid ERD, table status and constraints are in [ERD.md](ERD.md). The active tables are
@@ -170,6 +197,10 @@ Two application rules are worth calling out here:
 | `/api/ocr/scale` | POST | Read a scale display with PaddleOCR | — |
 | `/api/ocr/warm` | POST | Start waking the OCR Space | — |
 | `/api/readings` | POST | Record a deposit and update the bin | — |
+| `/api/capture/pair` | POST, GET, DELETE | Laptop: pairing code, phone status, unpair | Capture session (GET, DELETE) |
+| `/api/capture/join` | POST | Phone: trade a pairing code for the session | Code, 20 wrong tries per address |
+| `/api/capture/job` | POST, GET, DELETE | Laptop: ask the phone for a photo, poll, cancel | Capture session |
+| `/api/capture/phone` | GET, POST | Phone: check for a job, claim, report photo/result | Capture session |
 | `/api/collect` | POST | Empty a bin and write an audit event | — |
 | `/api/sync` | POST | Insert one simulated remote reading | Demo controls |
 | `/api/simulate` | POST | One demo live-day step, including auto-collect | Demo controls |

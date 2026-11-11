@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   CheckCircle2,
   Keyboard,
@@ -23,7 +31,17 @@ import {
   warmOcr,
   type Rect,
 } from "@/lib/client/scale-ocr";
+import {
+  cancelCapture,
+  CaptureError,
+  getCapture,
+  getPairStatus,
+  requestCapture,
+  setCaptureSession,
+  useCaptureSession,
+} from "@/lib/client/capture";
 import { useDemoMode, useScaleUnit } from "@/lib/client/station";
+import type { CaptureJob, CaptureResult, CaptureStatus, PairStatus } from "@/lib/capture-types";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import { useVisitKey } from "@/lib/client/use-visit-key";
 import type { OcrLine } from "@/lib/languages";
@@ -37,6 +55,7 @@ type Phase =
   | "aligning"
   | "locked"
   | "captured"
+  | "remote"
   | "ocr"
   | "manual"
   | "saving"
@@ -46,11 +65,19 @@ type Phase =
   | "no-sample";
 
 /**
- * Where the photo of the scale comes from. A phone at the bin will send it later;
- * until then a sample photo or an uploaded one stands in. A "demo" read has no real photo:
- * it borrows the sample photo for the animation, and the weight is the one the presenter chose.
+ * Where the photo of the scale comes from. The phone paired with this laptop takes it ("phone",
+ * see /cleaner/pair); without one, a sample photo or an uploaded one stands in. A "demo" read has
+ * no real photo: it borrows the sample photo for the animation, and the weight is the one the
+ * presenter chose.
  */
-type Source = "sample" | "upload" | "demo";
+type Source = "sample" | "upload" | "demo" | "phone";
+
+/** How often the laptop checks on the phone's photo. */
+const REMOTE_POLL_MS = 1_000;
+/** After this long without the phone picking the request up, say what to check. */
+const REMOTE_SLOW_MS = 20_000;
+/** Give up on the phone after this long. Long enough for the OCR service to wake up. */
+const REMOTE_LIMIT_MS = 150_000;
 
 const SEGMENTS: Record<string, string> = {
   "0": "abcdef",
@@ -225,6 +252,15 @@ function WeighStationVisit() {
   const [ocrMs, setOcrMs] = useState<number | null>(null);
   const [swapping, setSwapping] = useState(false);
   const [justSwapped, setJustSwapped] = useState(false);
+  const phoneSid = useCaptureSession("laptop");
+  const [phoneStatus, setPhoneStatus] = useState<PairStatus | null>(null);
+  /** Where the phone's photo is, while the laptop waits for it. */
+  const [remote, setRemote] = useState<CaptureStatus | "sending">("sending");
+  const [remoteSlow, setRemoteSlow] = useState(false);
+  /** The last photo was asked of the phone, so retaking asks it again. */
+  const [fromPhone, setFromPhone] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const autoStarted = useRef(false);
   const runRef = useRef(0);
   const imageRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -242,11 +278,35 @@ function WeighStationVisit() {
   }, []);
 
   useEffect(() => {
-    if (phase !== "ocr") return;
+    if (phase !== "ocr" && phase !== "remote") return;
     const started = Date.now();
     const id = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 500);
     return () => window.clearInterval(id);
   }, [phase]);
+
+  // Is a phone paired with this laptop, and is it on? A pairing that's gone is forgotten.
+  useEffect(() => {
+    if (!phoneSid) return;
+    let cancelled = false;
+    getPairStatus(phoneSid)
+      .then((status) => {
+        if (cancelled) return;
+        if (!status) setCaptureSession("laptop", null);
+        setPhoneStatus(status);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [phoneSid]);
+
+  // Picking the level is what asks the phone for the photo: start as soon as the step opens.
+  const startFromLevel = useEffectEvent(() => void startRemote());
+  useEffect(() => {
+    if (autoStarted.current || loading || !phoneSid || !cleaner || !bin || !validLevel) return;
+    autoStarted.current = true;
+    if (bin.weightKg < bin.capacityKg) startFromLevel();
+  }, [loading, phoneSid, cleaner, bin, validLevel]);
 
   if (loading) {
     return (
@@ -301,6 +361,8 @@ function WeighStationVisit() {
     setPending(null);
     setOcrMs(null);
     setJustSwapped(false);
+    setNotice(null);
+    setFromPhone(false);
   }
 
   /** Sets the reading in kg, and how the scale showed it (kg, unless given). */
@@ -377,34 +439,148 @@ function WeighStationVisit() {
       });
       if (!result) return;
       setWaking(false);
-      setOcrMs(result.ms);
-      setLines(result.lines);
-      setOcrDone(true);
-      const reading = result.reading;
-      if (!reading) {
-        throw new Error(
-          "No weight was found on the scale display. Retake the photo with the display in view, or type the weight.",
-        );
-      }
-      if (reading.kg > bin.capacityKg) {
-        throw new Error(
-          `The photo seems to show ${shownText(reading.value, reading.unit)}, more than the bin's ${bin.capacityKg} kg. Retake the photo, or type the weight.`,
-        );
-      }
-      setRead(reading.kg, {
-        value: reading.value,
-        unit: reading.unit,
-        guessed: reading.unitFrom === "guess",
-      });
-      if (reading.kg <= startKg) {
-        setPhase("rejected");
-        return;
-      }
-      await save(reading.kg, "ocr", next.photo);
+      await logReading(result, startKg, next.photo);
     } catch (err) {
       if (!live()) return;
       setWaking(false);
       setError(err instanceof Error ? err.message : "The photo couldn't be read.");
+      setPhase("failed");
+    }
+  }
+
+  /** Checks the weight OCR read, then logs it. Throws when it can't be a valid reading. */
+  async function logReading(result: CaptureResult, startKg: number, photo: string | null) {
+    if (!bin) return;
+    setOcrMs(result.ms);
+    setLines(result.lines);
+    setOcrDone(true);
+    const reading = result.reading;
+    if (!reading) {
+      throw new Error(
+        "No weight was found on the scale display. Retake the photo with the display in view, or type the weight.",
+      );
+    }
+    if (reading.kg > bin.capacityKg) {
+      throw new Error(
+        `The photo seems to show ${shownText(reading.value, reading.unit)}, more than the bin's ${bin.capacityKg} kg. Retake the photo, or type the weight.`,
+      );
+    }
+    setRead(reading.kg, {
+      value: reading.value,
+      unit: reading.unit,
+      guessed: reading.unitFrom === "guess",
+    });
+    if (reading.kg <= startKg) {
+      setPhase("rejected");
+      return;
+    }
+    await save(reading.kg, "ocr", photo);
+  }
+
+  /**
+   * Asks the paired phone for a photo, then waits while it takes and reads it. The phone sends a
+   * preview to show and the OCR result; this laptop checks the reading and saves it as usual.
+   */
+  async function startRemote() {
+    if (!bin || !phoneSid) return;
+    const sid = phoneSid;
+    const live = newRun();
+    clearResult();
+    setShot(null);
+    setBeforeKg(binKg);
+    setFromPhone(true);
+    setRemote("sending");
+    setRemoteSlow(false);
+    setElapsed(0);
+    setPhase("remote");
+
+    let job: CaptureJob;
+    try {
+      job = await requestCapture(sid, {
+        binId: bin.id,
+        binShort: bin.short,
+        level,
+        unit: scaleUnit,
+        capacityKg: bin.capacityKg,
+      });
+    } catch (err) {
+      if (!live()) return;
+      setFromPhone(false);
+      if (err instanceof CaptureError && (err.status === 404 || err.status === 401)) {
+        setCaptureSession("laptop", null);
+        setPhoneStatus(null);
+        setNotice("The phone camera isn't paired any more. Use another option below, or pair it again.");
+      } else {
+        setNotice(`Couldn't reach the phone camera. ${err instanceof Error ? err.message : ""}`.trim());
+      }
+      setPhase("choose");
+      return;
+    }
+
+    const started = Date.now();
+    let photo: Shot | null = null;
+    let misses = 0;
+    setRemote("waiting");
+    try {
+      for (;;) {
+        await sleep(REMOTE_POLL_MS);
+        if (!live()) break;
+        if (Date.now() - started > REMOTE_LIMIT_MS) {
+          throw new Error(
+            "The phone didn't send a reading in time. Check the phone's camera page, then retake the photo, or type the weight.",
+          );
+        }
+        let current: CaptureJob | null;
+        try {
+          current = await getCapture(sid, job.id);
+          misses = 0;
+        } catch {
+          if (++misses >= 8) throw new Error("Lost the connection while waiting for the phone.");
+          continue;
+        }
+        if (!live()) break;
+        if (!current) {
+          throw new Error(
+            "The photo request ended before the phone answered. Retake the photo, or type the weight.",
+          );
+        }
+        setRemote(current.status);
+        setRemoteSlow(current.status === "waiting" && Date.now() - started > REMOTE_SLOW_MS);
+
+        // Show the phone's photo as soon as it's taken, while it's being read.
+        if (current.preview && !photo) {
+          const next: Shot = {
+            src: current.preview,
+            crop: null,
+            refKg: null,
+            lcd: null,
+            photo: null,
+            source: "phone",
+          };
+          photo = next;
+          const image = await loadImage(current.preview).catch(() => null);
+          if (!live()) break;
+          if (image) {
+            imageRef.current = image;
+            setSize(imageSize(image));
+          }
+          setShot(next);
+          setElapsed(0);
+          setPhase("ocr");
+        }
+
+        if (current.status === "failed") throw new Error(current.error ?? "The phone couldn't read the scale.");
+        if (current.status === "done" && current.result) {
+          await logReading(current.result, binKg, null);
+          return;
+        }
+      }
+      // Cancelled here (Cancel, Type instead, or leaving the page): tell the phone.
+      void cancelCapture(sid, job.id);
+    } catch (err) {
+      void cancelCapture(sid, job.id);
+      if (!live()) return;
+      setError(err instanceof Error ? err.message : "The phone couldn't read the scale.");
       setPhase("failed");
     }
   }
@@ -526,7 +702,9 @@ function WeighStationVisit() {
   }
 
   function retake() {
-    if (shot?.source === "sample") {
+    if ((fromPhone || shot?.source === "phone") && phoneSid) {
+      void startRemote();
+    } else if (shot?.source === "sample") {
       void runSample(shot.src);
     } else if (shot?.source === "demo") {
       backToStart();
@@ -648,11 +826,54 @@ function WeighStationVisit() {
         </button>
       </>
     );
+  } else if (phase === "choose" && phoneSid) {
+    panel = (
+      <>
+        <PanelTitle>Photograph the scale</PanelTitle>
+        {justSwapped && <SwapReminder />}
+        {notice && <Notice>{notice}</Notice>}
+        <p className="cleaner-body">
+          Put the bin on the scale. The phone at the bin takes the photo, and the weight is logged
+          automatically.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => void startRemote()}
+            className="btn-smu btn-smu-gold cleaner-action"
+          >
+            <Smartphone className="h-5 w-5" /> Take the photo with the phone
+          </button>
+          <button
+            type="button"
+            onClick={chooseUpload}
+            title="Reads a photo you choose from this device"
+            className="btn-smu btn-smu-outline cleaner-action"
+          >
+            <ScanText className="h-5 w-5" /> OCR scan
+          </button>
+          {demo && (
+            <button
+              type="button"
+              onClick={() => void runSample()}
+              title="Reads a sample photo of the scale display"
+              className="btn-smu btn-smu-outline cleaner-action"
+            >
+              <ScanLine className="h-5 w-5" /> Read a sample photo
+            </button>
+          )}
+        </div>
+        <PhoneLine status={phoneStatus} />
+        {demoChips}
+        {typeButton}
+      </>
+    );
   } else if (phase === "choose") {
     panel = (
       <>
         <PanelTitle>Choose how to read the scale</PanelTitle>
         {justSwapped && <SwapReminder />}
+        {notice && <Notice>{notice}</Notice>}
         <p className="cleaner-body">
           Put the bin on the scale, then pick an option. The weight is logged automatically.
         </p>
@@ -676,6 +897,35 @@ function WeighStationVisit() {
         </div>
         {demoChips}
         {typeButton}
+        <Link href="/cleaner/pair" className="text-link text-[15px]">
+          <Smartphone className="h-4 w-4" /> Set up the phone camera
+        </Link>
+      </>
+    );
+  } else if (phase === "remote") {
+    panel = (
+      <>
+        <PanelTitle>Taking the photo…</PanelTitle>
+        <p className="flex items-center gap-3 text-[17px] text-black/80" role="status">
+          <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-smu-gold" />
+          {remote === "sending"
+            ? "Asking the phone at the bin"
+            : remote === "capturing"
+              ? "The phone is counting down to the photo"
+              : `Waiting for the phone · ${elapsed}s`}
+        </p>
+        <p className="cleaner-body">Keep your hands clear of the scale until the photo is taken.</p>
+        {remoteSlow && (
+          <Notice>
+            The phone hasn&apos;t answered. Check its screen is on and its camera page says Ready.
+          </Notice>
+        )}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          {typeButton}
+          <button type="button" onClick={backToStart} className="cleaner-link text-black/70">
+            Cancel
+          </button>
+        </div>
       </>
     );
   } else if (busy) {
@@ -916,7 +1166,8 @@ function WeighStationVisit() {
                 onClick={retake}
                 className={`btn-smu cleaner-action ${shot ? "btn-smu-outline" : "btn-smu-gold"}`}
               >
-                <RefreshCw className="h-5 w-5" /> {shot ? "Retake the photo" : "Choose another photo"}
+                <RefreshCw className="h-5 w-5" />{" "}
+                {fromPhone && !shot ? "Ask the phone again" : shot ? "Retake the photo" : "Choose another photo"}
               </button>
               {shot?.refKg != null && (
                 <button
@@ -969,9 +1220,11 @@ function WeighStationVisit() {
           alt={
             shot.source === "demo" && shot.displayKg != null
               ? `Demo: the scale display reads ${shot.displayKg.toFixed(3)} kg`
-              : shot.source !== "upload"
-                ? "Sample photo of the scale"
-                : "Photo of the scale"
+              : shot.source === "phone"
+                ? "Photo of the scale from the phone"
+                : shot.source !== "upload"
+                  ? "Sample photo of the scale"
+                  : "Photo of the scale"
           }
           className={`block h-auto w-full transition-[filter,transform] duration-[1200ms] ease-out ${
             phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
@@ -1046,12 +1299,17 @@ function WeighStationVisit() {
           ? "Weight typed by hand"
           : full && phase === "choose"
             ? "Swap the bin first"
-            : "Waiting for a photo of the scale"}
+            : phase === "remote"
+              ? "The phone is taking the photo"
+              : "Waiting for a photo of the scale"}
       </p>
       {!typedByHand && !(full && phase === "choose") && (
         <p className="max-w-md text-[16px] leading-6 text-white/70">
-          The phone at this bin will send it here. Until that&apos;s set up, use Read the scale (a
-          sample photo) or OCR scan (a photo you choose).
+          {phase === "remote"
+            ? "It shows up here once it's taken, while the weight is read."
+            : phoneSid
+              ? "The phone at this bin sends it here."
+              : "Pair a phone at this bin to send it here. Until then, use Read the scale (a sample photo) or OCR scan (a photo you choose)."}
         </p>
       )}
     </div>
@@ -1060,7 +1318,21 @@ function WeighStationVisit() {
   // ----- Demo-only details for assessors -----
 
   const pipeline: Array<[string, string | null, boolean]> = [
-    ["Photo", shot ? (shot.source === "sample" ? "sample photo" : shot.source === "demo" ? "stand-in sample photo" : "uploaded") : null, shot != null && !busy],
+    [
+      "Photo",
+      shot
+        ? shot.source === "sample"
+          ? "sample photo"
+          : shot.source === "demo"
+            ? "stand-in sample photo"
+            : shot.source === "phone"
+              ? "phone camera"
+              : "uploaded"
+        : phase === "remote"
+          ? `asked the phone… ${remote}`
+          : null,
+      shot != null && !busy,
+    ],
     [
       "OCR",
       phase === "ocr"
@@ -1092,7 +1364,7 @@ function WeighStationVisit() {
       cleaner={cleaner}
       where={`${bin.short} central bin`}
       idleMs={phase === "saved" ? SAVED_IDLE_MS : undefined}
-      pauseIdle={busy || phase === "saving"}
+      pauseIdle={busy || phase === "remote" || phase === "saving"}
     >
       <div className="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
         <div>
@@ -1193,6 +1465,34 @@ function SwapReminder() {
     >
       Bin swapped. Put the empty bin on the scale and press <strong>Z/T</strong>, then add the
       grounds.
+    </p>
+  );
+}
+
+function Notice({ children }: { children: ReactNode }) {
+  return (
+    <p
+      role="status"
+      className="rounded border border-smu-gold/40 bg-smu-cream-light px-4 py-3 text-[16px] leading-6 text-black/85"
+    >
+      {children}
+    </p>
+  );
+}
+
+/** Whether the paired phone is on, as of when this step opened. */
+function PhoneLine({ status }: { status: PairStatus | null }) {
+  if (!status) return null;
+  return (
+    <p className="flex items-center gap-2 text-[15px] text-black/70">
+      <span
+        aria-hidden
+        className={`h-2.5 w-2.5 rounded-full ${status.phoneOnline ? "bg-smu-success" : "bg-black/30"}`}
+      />
+      {status.phoneOnline ? "Phone camera is on" : "Phone camera isn't connected. Open its camera page."}
+      <Link href="/cleaner/pair" className="text-link ml-auto text-[14px]">
+        Setup
+      </Link>
     </p>
   );
 }
