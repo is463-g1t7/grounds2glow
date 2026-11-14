@@ -348,11 +348,13 @@ institution's editorial rhythm - full-bleed hero, cream section, navy proof stri
 grids, dark partnership panel, image-led next steps. The operational pages (dashboard,
 OCR/scale tools) keep the same chrome and type but tighten the density for data. The
 cleaner app and Grounds to Glow kiosk drop the corporate header/footer and become focused
-standalone experiences built from the same tokens.
+standalone experiences built from the same tokens. They keep one thing from the site header: a
+compact `Menu` button (`SiteHeader variant="bar"`) at the end of their own top bar, so the site
+menu is on every page.
 
 **Current product surfaces.** The landing loop, live dashboard, cleaner check-in/building/
-weigh flow, Grounds to Glow kiosk and chat, printable staff passes, and the OCR/scan demo
-tools. The marketplace and news hub described in older material have been removed from the
+weigh flow, Grounds to Glow kiosk and chat, demo staff passes, and the demo scanner and OCR
+tools under `/demo`. The cleaner station is either live (green pill) or demo (gold pill). The marketplace and news hub described in older material have been removed from the
 app; keep their patterns only where a current surface still uses them.
 
 **Design principles**

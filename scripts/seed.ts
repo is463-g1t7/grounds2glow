@@ -199,6 +199,41 @@ const programmeEvents = [
   { id: "event-3", title: "Circular Coffee Hackathon", eventDate: "2026-11-28", venue: "School of Computing", description: "Students and staff prototype new uses for spent grounds in a one-day sprint.", image: "/images/research-asia.webp" },
 ];
 
+/**
+ * About 30 days of coffee scrubs dispensed at the kiosk: busy on weekdays, quiet at weekends,
+ * between 9am and 6pm, and never later than now.
+ */
+export function buildDispenses(): { at: Date; recipe: string }[] {
+  const now = Date.now();
+  const rand = mulberry32(hashOf("scrub-dispenses"));
+  const recipes = [
+    { recipe: "gentle", weight: 0.3 },
+    { recipe: "standard", weight: 0.5 },
+    { recipe: "moisturising", weight: 0.2 },
+  ];
+  const pick = () => {
+    let r = rand();
+    for (const o of recipes) {
+      r -= o.weight;
+      if (r < 0) return o.recipe;
+    }
+    return "standard";
+  };
+  const out: { at: Date; recipe: string }[] = [];
+  for (let d = 0; d < HISTORY_DAYS; d++) {
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - d);
+    const weekend = day.getDay() === 0 || day.getDay() === 6;
+    const count = weekend ? Math.floor(rand() * 4) : 5 + Math.floor(rand() * 10);
+    for (let i = 0; i < count; i++) {
+      const at = new Date(day.getTime() + (9 + rand() * 9) * HOUR);
+      if (at.getTime() <= now) out.push({ at, recipe: pick() });
+    }
+  }
+  return out;
+}
+
 const metrics = [
   { key: "collected", value: "1,284 kg", label: "Collected since launch", detail: "Programme to date", tone: "gold" },
   { key: "co2", value: "412 kg", label: "CO₂e avoided since launch", detail: "Programme to date", tone: "navy" },
@@ -220,7 +255,7 @@ export async function seedDatabase(db: Database): Promise<void> {
 
   await db.transaction(async (tx) => {
     await tx.execute(
-      sql`TRUNCATE bin_events, news_items, programme_events, programme_metrics, bins, cleaners RESTART IDENTITY CASCADE`
+      sql`TRUNCATE bin_events, scrub_dispenses, news_items, programme_events, programme_metrics, bins, cleaners RESTART IDENTITY CASCADE`
     );
 
     await tx.insert(schema.cleaners).values(cleaners);
@@ -252,6 +287,7 @@ export async function seedDatabase(db: Database): Promise<void> {
         afterKg: e.afterKg == null ? null : String(e.afterKg),
       }))
     );
+    await tx.insert(schema.scrubDispenses).values(buildDispenses());
     await tx.insert(schema.newsItems).values(
       news.map((n, sort) => ({ ...n, sort }))
     );

@@ -95,7 +95,7 @@ export default function ScanPage() {
       }
       const { event } = await apiRequest<{ event: BinEvent }>("/api/readings", {
         method: "POST",
-        body: JSON.stringify({ binId: bin.id, level: safeLevel, afterKg: kg, source: "ocr" }),
+        body: JSON.stringify({ binId: bin.id, level: safeLevel, afterKg: kg, source: "demo" }),
       });
       await refresh();
       setResult({
@@ -147,12 +147,12 @@ export default function ScanPage() {
   return (
     <>
       <PageHeader
-        title="Scale scanner"
-        lead="Point the overhead phone at the scale LCD, scan, and the weight posts straight to the dashboard."
-        crumbs={[{ label: "Home", href: "/" }, { label: "Tools" }, { label: "Scale scanner" }]}
+        title="Demo: scale scanner"
+        lead="A simulated scanner. Your photo is not read: a sample reading above the bin's current weight is posted and labelled as a demo reading. For real OCR, use the live smart bin station."
+        crumbs={[{ label: "Home", href: "/" }, { label: "Demo", href: "/demo" }, { label: "Scale scanner" }]}
         actions={
           <>
-            <Link href="/ocr" className="btn-smu btn-smu-outline">
+            <Link href="/demo/ocr" className="btn-smu btn-smu-outline">
               <ScanLine className="h-4 w-4" /> OCR reader
             </Link>
             <Link href="/dashboard" className="btn-smu btn-smu-outline">
@@ -274,19 +274,19 @@ export default function ScanPage() {
             </section>
 
             <section className="flex flex-col gap-3 rounded-md border border-black/10 bg-white p-5 font-mono text-[13px] shadow-card">
-              <h2 className="font-display text-[24px] leading-8 text-smu-navy">Cloud endpoint</h2>
+              <h2 className="font-display text-[24px] leading-8 text-smu-navy">Simulated pipeline</h2>
               <dl className="flex flex-col gap-2">
                 <div className="flex justify-between gap-2">
                   <dt className="text-smu-muted">scale photo</dt>
                   <dd>{shotUrl ? "captured ✓" : "…"}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-smu-muted">phone ocr</dt>
+                  <dt className="text-smu-muted">simulated ocr</dt>
                   <dd className="tabular-nums">{result ? weight(result.kg) : "…"}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-smu-muted">upload</dt>
-                  <dd className={result ? "text-[#287a28]" : ""}>{result ? "sent ✓" : "…"}</dd>
+                  <dd className={result ? "text-[#287a28]" : ""}>{result ? "saved as demo reading ✓" : "…"}</dd>
                 </div>
               </dl>
               {result && (
@@ -306,7 +306,7 @@ export default function ScanPage() {
                 </p>
               )}
               <p className="mt-auto border-t border-black/10 pt-3 font-sans text-[11px] text-black/40">
-                Readings post to the database and appear in the dashboard audit trail.
+                Demo readings post to the shared database and appear in the audit trail as &ldquo;Demo reading&rdquo;.
               </p>
             </section>
           </div>

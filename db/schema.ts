@@ -72,6 +72,25 @@ export const binEvents = pgTable(
   ]
 );
 
+/**
+ * One row each time someone dispenses a coffee scrub at the Grounds to Glow kiosk. It holds no
+ * name or ID: the dashboard only needs how many people dispensed, when, and which recipe.
+ */
+export const scrubDispenses = pgTable(
+  "scrub_dispenses",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    recipe: text("recipe").notNull(),
+  },
+  (t) => [
+    index("scrub_dispenses_at_idx").on(t.at.desc()),
+    check("scrub_dispenses_recipe_check", sql`${t.recipe} in ('gentle', 'standard', 'moisturising')`),
+  ]
+);
+
 export const newsItems = pgTable("news_items", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),

@@ -95,9 +95,11 @@ bun run db:reset     # migrate + seed
 bun run db:down      # stop the container (volume is kept)
 ```
 
-`db:seed` truncates `bin_events`, `news_items`, `programme_events`, `programme_metrics`, `bins` and
+`db:seed` truncates `bin_events`, `scrub_dispenses`, `news_items`, `programme_events`, `programme_metrics`, `bins` and
 `cleaners`, then inserts seven bins, four cleaners and about 30 days of deterministic history. The
-legacy marketplace tables were dropped in migration `0003_optimal_mole_man.sql`.
+legacy marketplace tables were dropped in migration `0003_optimal_mole_man.sql`. Migration
+`0004_scrub_dispenses.sql` adds `scrub_dispenses`: run `bun run db:migrate` after pulling, and
+`bun run db:seed` to load sample dispenses locally.
 
 > `db:seed` and `db:reset` are destructive. They target whichever host `DIRECT_URL` (or, failing
 > that, `DATABASE_URL`) resolves to; see the caution in §3.2 before running them.
@@ -142,8 +144,10 @@ API guard disagreeing. Rebuild and verify both after changing the value.
 `/api/bootstrap` caches a 15-second JSON snapshot in Upstash Redis when both REST variables are set.
 The cache is optional: without them the route reads Postgres on every request, and local builds still
 work. The dashboard fetches on open, on tab focus and with the Refresh button; the button adds
-`?refresh=1`, which bypasses the cache and writes a fresh snapshot. Deposits, collections, demo
-sync/simulate and reset delete the key so the next read is fresh.
+`?refresh=1`, which bypasses the cache and writes a fresh snapshot. Deposits, collections, kiosk
+dispenses (`POST /api/dispense`), demo sync/simulate and reset delete the key so the next read is
+fresh. The key is `smu-circular-coffee:bootstrap:v2`; it was bumped when the snapshot gained
+`dispenses`, so older cached snapshots are never served.
 
 `POST /api/kiosk-chat` also uses Upstash: it hashes the normalized prompt and caches successful
 OpenRouter answers for 24 hours. A hit returns without calling the LLM and reports
@@ -344,6 +348,7 @@ Expected production characteristics at the time of the deployment audit:
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `DATABASE_URL is not set` at runtime | Missing runtime env | Set it in `.env.local` or Vercel; rebuild/redeploy if needed |
+| `docker compose up` says `bind: An attempt was made to access a socket in a way forbidden by its access permissions` (Windows) | The host port falls in a range Windows has reserved (Hyper-V/WSL). Check with `netsh interface ipv4 show excludedportrange protocol=tcp` | Pick a port outside every listed range, set it in `docker-compose.yml` (`"<port>:5432"`), `DATABASE_URL` and `DIRECT_URL`. Or, in an admin shell, `net stop winnat` then `net start winnat` |
 | `db:migrate` cannot connect | Docker not ready, wrong port, or neither `DIRECT_URL` nor `DATABASE_URL` is set; a 6543 pooler URL also fails migrations | Use `docker compose up -d --wait`; check port 55432; pass the 5432 session/direct URL for cloud |
 | Supabase SSL/certificate error | URL not recognised as Supabase, or SSL forced incorrectly | Let the regex detect it, or set `DATABASE_SSL=true` for the app/Drizzle/seed; `db:check` infers SSL only from the URL |
 | Local commands hit the cloud database | `.env` has cloud credentials and `.env.local` is missing or does not set the URLs | Create `.env.local` from `.env.local.example`; print the resolved host before a destructive command |

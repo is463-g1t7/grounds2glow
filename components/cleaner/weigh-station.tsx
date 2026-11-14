@@ -40,7 +40,7 @@ import {
   setCaptureSession,
   useCaptureSession,
 } from "@/lib/client/capture";
-import { useDemoMode, useScaleUnit } from "@/lib/client/station";
+import { useScaleUnit, useStationMode } from "@/lib/client/station";
 import type { CaptureJob, CaptureResult, CaptureStatus, PairStatus } from "@/lib/capture-types";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import { useVisitKey } from "@/lib/client/use-visit-key";
@@ -101,6 +101,7 @@ const SEGMENT_RECTS: Record<string, readonly [number, number, number, number]> =
   f: [0, 1.9, 2.4, 9.2],
   g: [1.9, 10.8, 6.2, 2.4],
 };
+
 const LCD_INK = "#7d82ee";
 
 /**
@@ -167,9 +168,6 @@ function DemoDisplay({ lcd, kg: value }: { lcd: Rect; kg: number }) {
   );
 }
 
-/** Demo mode: grounds a presenter can add in one tap. The scale then shows the bin's new total. */
-const DEMO_ADDS_KG = [0.5, 1, 2];
-
 /** The photo being read. `crop` is the part sent to OCR, or null for the whole photo. */
 type Shot = {
   src: string;
@@ -224,7 +222,7 @@ export function WeighStation() {
 
 function WeighStationVisit() {
   const params = useSearchParams();
-  const demo = useDemoMode();
+  const { demo, base } = useStationMode();
   const scaleUnit = useScaleUnit();
   const { data, loading, refresh } = useBootstrap();
   const cleaner = data.cleaners.find((c) => c.id === params.get("cleaner"));
@@ -237,7 +235,6 @@ function WeighStationVisit() {
   const [shot, setShot] = useState<Shot | null>(null);
   const [size, setSize] = useState<Size | null>(null);
   const [lines, setLines] = useState<OcrLine[]>([]);
-  const [ocrDone, setOcrDone] = useState(false);
   const [waking, setWaking] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
   const [beforeKg, setBeforeKg] = useState<number | null>(null);
@@ -249,10 +246,11 @@ function WeighStationVisit() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ kg: number; from: EventSource } | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [ocrMs, setOcrMs] = useState<number | null>(null);
   const [swapping, setSwapping] = useState(false);
   const [justSwapped, setJustSwapped] = useState(false);
-  const phoneSid = useCaptureSession("laptop");
+  // The demo station has no phone: it never pairs, and ignores any pairing left from the live one.
+  const pairedSid = useCaptureSession("laptop");
+  const phoneSid = demo ? null : pairedSid;
   const [phoneStatus, setPhoneStatus] = useState<PairStatus | null>(null);
   /** Where the phone's photo is, while the laptop waits for it. */
   const [remote, setRemote] = useState<CaptureStatus | "sending">("sending");
@@ -325,7 +323,7 @@ function WeighStationVisit() {
               Choose a pantry first
             </h1>
             <Link
-              href={`/cleaner/building?cleaner=${cleaner.id}`}
+              href={`${base}/building?cleaner=${cleaner.id}`}
               className="btn-smu btn-smu-gold mt-5"
             >
               Choose pantry
@@ -342,7 +340,7 @@ function WeighStationVisit() {
   const before = beforeKg ?? binKg;
   const full = binKg >= bin.capacityKg;
   const busy = phase === "aligning" || phase === "locked" || phase === "captured" || phase === "ocr";
-  const pickHref = `/cleaner/building?cleaner=${cleaner.id}`;
+  const pickHref = `${base}/building?cleaner=${cleaner.id}`;
 
   /** Starts a new run and cancels any earlier one. Returns whether this run is still current. */
   function newRun(): () => boolean {
@@ -352,14 +350,12 @@ function WeighStationVisit() {
 
   function clearResult() {
     setLines([]);
-    setOcrDone(false);
     setWaking(false);
     setActiveLine(null);
     setRead(null);
     setEvent(null);
     setError(null);
     setPending(null);
-    setOcrMs(null);
     setJustSwapped(false);
     setNotice(null);
     setFromPhone(false);
@@ -451,9 +447,7 @@ function WeighStationVisit() {
   /** Checks the weight OCR read, then logs it. Throws when it can't be a valid reading. */
   async function logReading(result: CaptureResult, startKg: number, photo: string | null) {
     if (!bin) return;
-    setOcrMs(result.ms);
     setLines(result.lines);
-    setOcrDone(true);
     const reading = result.reading;
     if (!reading) {
       throw new Error(
@@ -585,6 +579,38 @@ function WeighStationVisit() {
     }
   }
 
+  /** Plays the find-the-display animation on the sample photo, then logs `total` as a demo reading. */
+  async function runSampleAddOn(total: number, live: () => boolean) {
+    const frame = SAMPLE_FRAMES[0];
+    setShot({
+      src: frame.src,
+      crop: null,
+      refKg: null,
+      lcd: frame.lcd,
+      photo: null,
+      source: "demo",
+      displayKg: total,
+    });
+    setPhase("aligning");
+    const [image] = await Promise.all([loadImage(frame.src).catch(() => null), sleep(1200)]);
+    if (!live()) return;
+    if (!image) {
+      setError("The sample photo didn't load. Check the connection and try again.");
+      setPhase("failed");
+      return;
+    }
+    imageRef.current = image;
+    setSize(imageSize(image));
+    setPhase("locked");
+    await sleep(700);
+    if (!live()) return;
+    setPhase("captured");
+    await sleep(400);
+    if (!live()) return;
+    setRead(total);
+    await save(total, "demo", null);
+  }
+
   /** Reads a sample photo, picking one that shows more than the bin already holds. */
   async function runSample(exclude?: string) {
     const live = newRun();
@@ -592,8 +618,15 @@ function WeighStationVisit() {
     setBeforeKg(binKg);
     const frame = pickFrame(binKg, exclude);
     if (!frame) {
-      setShot(null);
-      setPhase("no-sample");
+      // The bin already holds more than the sample photo shows, so the sample adds its weight on
+      // top instead: the display shows the bin's new total and it is logged as a demo reading.
+      const total = Math.min(bin?.capacityKg ?? Infinity, Math.round((binKg + SAMPLE_FRAMES[0].refKg) * 1000) / 1000);
+      if (total <= binKg) {
+        setShot(null);
+        setPhase("no-sample");
+        return;
+      }
+      await runSampleAddOn(total, live);
       return;
     }
     const next: Shot = {
@@ -623,46 +656,6 @@ function WeighStationVisit() {
     await sleep(400);
     if (!live()) return;
     await readShot(next, image, binKg, live);
-  }
-
-  /**
-   * Demo mode: plays the same find-the-display animation on the sample photo, then logs the
-   * weight the presenter chose instead of reading the photo. It's saved as a "demo" reading.
-   */
-  async function runDemo(addKg: number) {
-    const live = newRun();
-    clearResult();
-    setBeforeKg(binKg);
-    const total = Math.round((binKg + addKg) * 1000) / 1000;
-    const frame = SAMPLE_FRAMES[0];
-    const next: Shot = {
-      src: frame.src,
-      crop: null,
-      refKg: null,
-      lcd: frame.lcd,
-      photo: null,
-      source: "demo",
-      displayKg: total,
-    };
-    setShot(next);
-    setPhase("aligning");
-    const [image] = await Promise.all([loadImage(frame.src).catch(() => null), sleep(1200)]);
-    if (!live()) return;
-    if (!image) {
-      setError("The sample photo didn't load. Check the connection and try again.");
-      setPhase("failed");
-      return;
-    }
-    imageRef.current = image;
-    setSize(imageSize(image));
-    setPhase("locked");
-    await sleep(700);
-    if (!live()) return;
-    setPhase("captured");
-    await sleep(400);
-    if (!live()) return;
-    setRead(total);
-    await save(total, "demo", null);
   }
 
   async function onUpload(e: ChangeEvent<HTMLInputElement>) {
@@ -776,36 +769,6 @@ function WeighStationVisit() {
     </button>
   );
 
-  const demoChips = demo ? (
-    <div className="rounded border border-dashed border-black/25 p-3">
-      <p className="text-[14px] font-semibold text-black/70">Demo · weight to read</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {DEMO_ADDS_KG.map((add) => {
-          const total = Math.round((binKg + add) * 1000) / 1000;
-          const fits = total <= bin.capacityKg;
-          return (
-            <button
-              key={add}
-              type="button"
-              disabled={!fits}
-              onClick={() => void runDemo(add)}
-              title={
-                fits
-                  ? `The scale will show ${kg(total)} in total`
-                  : `More than the bin holds (${kg(bin.capacityKg)})`
-              }
-              className="btn-smu btn-smu-outline btn-smu-sm disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              +{kg(add)}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-2 text-[13px] leading-5 text-black/60">
-        Added to the {kg(binKg)} already in the bin, and logged as a demo reading.
-      </p>
-    </div>
-  ) : null;
 
   let panel: ReactNode;
   if (phase === "choose" && full) {
@@ -850,32 +813,55 @@ function WeighStationVisit() {
             title="Reads a photo you choose from this device"
             className="btn-smu btn-smu-outline cleaner-action"
           >
-            <ScanText className="h-5 w-5" /> OCR scan
+            <ScanText className="h-5 w-5" /> Upload a photo of the scale
           </button>
           {demo && (
             <button
               type="button"
               onClick={() => void runSample()}
-              title="Reads a sample photo of the scale display"
+              title="Demo only: reads a stock photo of the scale display"
               className="btn-smu btn-smu-outline cleaner-action"
             >
-              <ScanLine className="h-5 w-5" /> Read a sample photo
+              <ScanLine className="h-5 w-5" /> Demo: read a sample photo
             </button>
           )}
         </div>
         <PhoneLine status={phoneStatus} />
-        {demoChips}
         {typeButton}
       </>
     );
-  } else if (phase === "choose") {
+  } else if (phase === "choose" && !demo) {
+    // Live station: only real readings. The photo is read by OCR, or the weight is typed.
     panel = (
       <>
-        <PanelTitle>Choose how to read the scale</PanelTitle>
+        <PanelTitle>Photograph the scale</PanelTitle>
         {justSwapped && <SwapReminder />}
         {notice && <Notice>{notice}</Notice>}
         <p className="cleaner-body">
-          Put the bin on the scale, then pick an option. The weight is logged automatically.
+          Put the bin on the scale, then take or choose a photo of its display. The weight is read
+          from the photo and logged automatically.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={chooseUpload} className="btn-smu btn-smu-gold cleaner-action">
+            <ScanText className="h-5 w-5" /> Photograph the scale
+          </button>
+        </div>
+        {typeButton}
+        <Link href="/cleaner/pair" className="text-link text-[15px]">
+          <Smartphone className="h-4 w-4" /> Set up the phone camera
+        </Link>
+      </>
+    );
+  } else if (phase === "choose") {
+    // Demo station: a stock photo stands in for the scale.
+    panel = (
+      <>
+        <PanelTitle>Photograph the scale</PanelTitle>
+        {justSwapped && <SwapReminder />}
+        {notice && <Notice>{notice}</Notice>}
+        <p className="cleaner-body">
+          Put the bin on the scale, then take or choose a photo of its display. The weight is read
+          from the photo and logged automatically.
         </p>
         <div className="flex flex-col gap-3">
           <button
@@ -884,7 +870,7 @@ function WeighStationVisit() {
             title="Reads a sample photo of the scale display"
             className="btn-smu btn-smu-gold cleaner-action"
           >
-            <ScanLine className="h-5 w-5" /> Read the scale
+            <ScanLine className="h-5 w-5" /> Read the sample photo
           </button>
           <button
             type="button"
@@ -892,10 +878,9 @@ function WeighStationVisit() {
             title="Reads a photo you choose from this device"
             className="btn-smu btn-smu-outline cleaner-action"
           >
-            <ScanText className="h-5 w-5" /> OCR scan
+            <ScanText className="h-5 w-5" /> Upload your own photo
           </button>
         </div>
-        {demoChips}
         {typeButton}
         <Link href="/cleaner/pair" className="text-link text-[15px]">
           <Smartphone className="h-4 w-4" /> Set up the phone camera
@@ -1074,7 +1059,7 @@ function WeighStationVisit() {
           <Link href={pickHref} autoFocus className="btn-smu btn-smu-gold cleaner-action">
             Log another level
           </Link>
-          <Link href="/cleaner" className="btn-smu btn-smu-outline cleaner-action">
+          <Link href={base} className="btn-smu btn-smu-outline cleaner-action">
             Done, sign out
           </Link>
         </div>
@@ -1122,7 +1107,7 @@ function WeighStationVisit() {
         </p>
         <div className="flex flex-col gap-3">
           <button type="button" onClick={chooseUpload} className="btn-smu btn-smu-gold cleaner-action">
-            <ScanText className="h-5 w-5" /> OCR scan
+            <ScanText className="h-5 w-5" /> Upload a photo
           </button>
           <button
             type="button"
@@ -1133,7 +1118,6 @@ function WeighStationVisit() {
             <Truck className="h-5 w-5" /> {swapping ? "Logging swap…" : "I've swapped in an empty bin"}
           </button>
         </div>
-        {demoChips}
         {typeButton}
       </>
     );
@@ -1169,7 +1153,7 @@ function WeighStationVisit() {
                 <RefreshCw className="h-5 w-5" />{" "}
                 {fromPhone && !shot ? "Ask the phone again" : shot ? "Retake the photo" : "Choose another photo"}
               </button>
-              {shot?.refKg != null && (
+              {demo && shot?.refKg != null && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1309,54 +1293,13 @@ function WeighStationVisit() {
             ? "It shows up here once it's taken, while the weight is read."
             : phoneSid
               ? "The phone at this bin sends it here."
-              : "Pair a phone at this bin to send it here. Until then, use Read the scale (a sample photo) or OCR scan (a photo you choose)."}
+              : demo
+                ? "Use Read the sample photo, or upload your own photo."
+                : "Pair a phone at this bin to send it here, or upload a photo of the scale display."}
         </p>
       )}
     </div>
   );
-
-  // ----- Demo-only details for assessors -----
-
-  const pipeline: Array<[string, string | null, boolean]> = [
-    [
-      "Photo",
-      shot
-        ? shot.source === "sample"
-          ? "sample photo"
-          : shot.source === "demo"
-            ? "stand-in sample photo"
-            : shot.source === "phone"
-              ? "phone camera"
-              : "uploaded"
-        : phase === "remote"
-          ? `asked the phone… ${remote}`
-          : null,
-      shot != null && !busy,
-    ],
-    [
-      "OCR",
-      phase === "ocr"
-        ? waking
-          ? `service starting… ${elapsed}s`
-          : `reading… ${elapsed}s`
-        : ocrDone
-          ? lines.length
-            ? `${lines.map((l) => `“${l.text}”`).join(" ")}${ocrMs ? ` in ${(ocrMs / 1000).toFixed(1)}s` : ""}`
-            : "no text found"
-          : null,
-      ocrDone && lines.length > 0,
-    ],
-    [
-      "Weight",
-      readKg != null && shown
-        ? `${shownText(shown.value, shown.unit)}${shown.unit === "g" ? ` → ${kgText(readKg)}` : ""} total${
-            shown.guessed ? " (unit guessed)" : ""
-          }`
-        : null,
-      readKg != null,
-    ],
-    ["Dashboard", phase === "saved" ? "updated" : null, phase === "saved"],
-  ];
 
   return (
     <CleanerShell
@@ -1393,54 +1336,6 @@ function WeighStationVisit() {
         <div className="flex min-w-0 flex-col gap-4">
           <div className="overflow-hidden rounded-md bg-smu-navy-deep">{stage}</div>
 
-          {demo && (
-            <div className="rounded-md border border-dashed border-black/20 p-4">
-              <p className="text-[14px] font-semibold text-black/70">Demo · how the reading travels</p>
-              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 font-mono text-[13px]">
-                {pipeline.map(([label, value, ok]) => (
-                  <div key={label} className="contents">
-                    <dt className="text-black/60">{label}</dt>
-                    <dd className={`truncate text-right ${ok ? "text-[#287a28]" : "text-black/70"}`}>
-                      {value ?? "…"}
-                      {ok ? " ✓" : ""}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <p className="mt-3 text-[13px] text-black/60">
-                Reads the display with PaddleOCR on Hugging Face, saves to the shared Postgres
-                database.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    runRef.current++;
-                    setWaking(false);
-                    setPending(null);
-                    setError("Demo: glare on the display stopped a clean read.");
-                    setPhase("failed");
-                  }}
-                  className="btn-smu btn-smu-outline btn-smu-sm"
-                >
-                  Simulate unreadable photo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    runRef.current++;
-                    setWaking(false);
-                    setBeforeKg(before);
-                    setRead(Math.max(0, Math.round((before - 0.4) * 100) / 100));
-                    setPhase("rejected");
-                  }}
-                  className="btn-smu btn-smu-outline btn-smu-sm"
-                >
-                  Simulate too-low reading
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         <Panel className="flex flex-col gap-5 p-6 lg:sticky lg:top-6">{panel}</Panel>

@@ -7,6 +7,7 @@ import {
   bins,
   cleaners,
   programmeMetrics,
+  scrubDispenses,
 } from "@/db/schema";
 import type {
   BarcodeMatch,
@@ -16,6 +17,7 @@ import type {
   Cleaner,
   EventSource,
   ProgrammeMetric,
+  ScrubDispense,
 } from "./types";
 
 const num = (v: string | number | null) => Number(v ?? 0);
@@ -108,17 +110,35 @@ export async function getMetrics(): Promise<ProgrammeMetric[]> {
 
 /** The dashboard analytics cap the history they need; this keeps the payload bounded. */
 const BOOTSTRAP_EVENT_LIMIT = 1000;
+const BOOTSTRAP_DISPENSE_LIMIT = 3000;
+
+export async function getDispenses(limit: number): Promise<ScrubDispense[]> {
+  const rows = await getDb()
+    .select()
+    .from(scrubDispenses)
+    .orderBy(desc(scrubDispenses.at))
+    .limit(limit);
+  return rows.map((r) => ({ id: r.id, at: iso(r.at), recipe: r.recipe }));
+}
+
+/** Records one scrub dispensed at the kiosk. */
+export async function createDispense(recipe: string): Promise<ScrubDispense> {
+  const [row] = await getDb().insert(scrubDispenses).values({ recipe }).returning();
+  return { id: row.id, at: iso(row.at), recipe: row.recipe };
+}
 
 export async function getBootstrap(): Promise<BootstrapData> {
-  const [binRows, events, cleanerRows, metrics] = await Promise.all([
+  const [binRows, events, dispenses, cleanerRows, metrics] = await Promise.all([
     getBins(),
     getEvents(BOOTSTRAP_EVENT_LIMIT),
+    getDispenses(BOOTSTRAP_DISPENSE_LIMIT),
     getCleaners(),
     getMetrics(),
   ]);
   return {
     bins: binRows,
     events,
+    dispenses,
     cleaners: cleanerRows,
     metrics,
   };
