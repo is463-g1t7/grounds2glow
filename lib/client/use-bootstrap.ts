@@ -6,7 +6,6 @@ import type { BootstrapData } from "@/lib/types";
 const EMPTY: BootstrapData = {
   bins: [],
   events: [],
-  dispenses: [],
   cleaners: [],
   metrics: [],
 };

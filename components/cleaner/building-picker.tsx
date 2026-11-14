@@ -7,7 +7,7 @@ import { CampusMap } from "@/components/smu/campus-map";
 import { ago } from "@/lib/analytics";
 import { levelsFor, statusFor } from "@/lib/bins";
 import { weight } from "@/lib/format";
-import { setStation, useStation, useStationMode } from "@/lib/client/station";
+import { setStation, useDemoMode, useStation } from "@/lib/client/station";
 import { apiRequest, useBootstrap } from "@/lib/client/use-bootstrap";
 import { useNow } from "@/lib/client/use-now";
 import { useVisitKey } from "@/lib/client/use-visit-key";
@@ -36,7 +36,7 @@ function BuildingPickerVisit() {
   const params = useSearchParams();
   const { data, loading, refresh } = useBootstrap();
   const station = useStation();
-  const { demo } = useStationMode();
+  const demo = useDemoMode();
   const cleaner = data.cleaners.find((c) => c.id === params.get("cleaner"));
   const stationBin = data.bins.find((b) => b.id === station) ?? null;
   const [pickedId, setPickedId] = useState<string | null>(null);
@@ -182,7 +182,6 @@ function LevelPicker({
   footer?: ReactNode;
 }) {
   const router = useRouter();
-  const { base } = useStationMode();
   const now = useNow();
   const [swapping, setSwapping] = useState(false);
   const [swapError, setSwapError] = useState<string | null>(null);
@@ -196,7 +195,7 @@ function LevelPicker({
   useEffect(() => {
     go.current = (level: number) => {
       if (full || level < 1 || level > levels) return;
-      router.push(`${base}/weigh?cleaner=${cleaner.id}&bin=${bin.id}&level=${level}`);
+      router.push(`/cleaner/weigh?cleaner=${cleaner.id}&bin=${bin.id}&level=${level}`);
     };
   });
 

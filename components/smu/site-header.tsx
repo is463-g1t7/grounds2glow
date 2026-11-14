@@ -15,31 +15,29 @@ type NavItem = {
 
 const nav: NavItem[] = [
   { label: "Overview", href: "/" },
-  { label: "Live dashboard", href: "/dashboard" },
-  { label: "Smart bin interface", href: "/cleaner" },
-  { label: "Grounds to Glow Kiosk", href: "/kiosk" },
   {
-    label: "Demo",
-    href: "/demo",
+    label: "Live dashboard",
+    href: "/dashboard",
     children: [
-      { label: "Smart bin interface", href: "/demo/cleaner" },
-      { label: "Demo staff passes", href: "/passes" },
+      { label: "Operations overview", href: "/dashboard", description: "Bins, collections and live telemetry" },
+      { label: "Collection schedule", href: "/dashboard#pickups", description: "Upcoming campus pickups" },
+      { label: "Impact report", href: "/dashboard#impact", description: "Diversion and CO₂e avoided" },
     ],
   },
+  {
+    label: "Tools",
+    href: "/scan",
+    children: [
+      { label: "Scale scanner", href: "/scan", description: "Read the scale LCD and post a weight" },
+      { label: "OCR reader", href: "/ocr", description: "Extract text from an image" },
+      { label: "Smart bin dashboard", href: "/cleaner", description: "Scan a pass, pick a pantry and weigh" },
+      { label: "Printable passes", href: "/passes", description: "Demo staff barcode cards" },
+    ],
+  },
+  { label: "Grounds to Glow Kiosk", href: "/kiosk" },
 ];
 
-/**
- * `site` is the fixed header on the main pages. `bar` is just the Search and Menu buttons, for
- * pages that have their own top bar (cleaner station, kiosk, phone camera), so the same menu is
- * on every page. `tone` picks the button colour for a dark or light bar.
- */
-export function SiteHeader({
-  variant = "site",
-  tone = "dark",
-}: {
-  variant?: "site" | "bar";
-  tone?: "dark" | "light";
-}) {
+export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
@@ -102,49 +100,8 @@ export function SiteHeader({
     }
   };
 
-  const light = variant === "bar" && tone === "light";
-  const ink = light ? "text-smu-navy hover:text-smu-gold-dark" : "text-white hover:text-smu-gold-light";
-  const rule = light ? "bg-black/25" : "bg-white/40";
-  const controls = (
-    <>
-      {variant === "site" && (
-        <>
-          <button
-            type="button"
-            onClick={() => { setQuery(""); setSearchOpen(true); }}
-            className={`relative flex items-center gap-2 text-[16px] font-semibold transition-colors ${ink}`}
-            aria-label="Search"
-            aria-expanded={searchOpen}
-          >
-            <span className="hidden sm:inline">Search</span>
-            <Search className="h-[18px] w-[18px]" strokeWidth={2.4} />
-          </button>
-          <span className={`h-7 w-px ${rule}`} aria-hidden="true" />
-        </>
-      )}
-      <button
-        type="button"
-        onClick={() => { setOpenGroup(null); setMenuOpen(true); }}
-        className={`relative flex items-center gap-2 text-[16px] font-semibold transition-colors ${ink}`}
-        aria-label="Open menu"
-        aria-expanded={menuOpen}
-        aria-controls="site-menu"
-      >
-        <span className="hidden sm:inline">Menu</span>
-        <span className="flex h-[14px] w-5 flex-col justify-between" aria-hidden="true">
-          <span className="h-[3px] w-5 rounded-sm bg-current" />
-          <span className="h-[3px] w-5 rounded-sm bg-current" />
-          <span className="h-[3px] w-5 rounded-sm bg-current" />
-        </span>
-      </button>
-    </>
-  );
-
   return (
     <>
-      {variant === "bar" ? (
-        <div className="flex items-center gap-3 sm:gap-5">{controls}</div>
-      ) : (
       <header className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[100px]">
         <div className="pointer-events-auto absolute inset-y-0 left-0 w-[196px] bg-[#f9f9f9] [clip-path:polygon(0_0,100%_0,calc(100%-30px)_100%,0_100%)] md:w-[250px] md:[clip-path:polygon(0_0,100%_0,calc(100%-44px)_100%,0_100%)]">
           <Link href="/"
@@ -161,11 +118,34 @@ export function SiteHeader({
 
         <div className="pointer-events-auto absolute right-0 top-0 flex h-[56px] w-auto items-center justify-end gap-3 bg-smu-navy pl-8 pr-4 [clip-path:polygon(24px_0,100%_0,100%_100%,0_100%)] sm:gap-5 md:h-[60px] md:w-[330px] md:gap-6 md:pl-14 md:pr-7 md:[clip-path:polygon(42px_0,100%_0,100%_100%,0_100%)]">
           <div className="absolute right-0 top-0 h-full w-24 bg-white/[0.04] [clip-path:polygon(45%_0,100%_0,100%_100%,0_100%)]" />
-          {controls}
-
+          <button
+            type="button"
+            onClick={() => { setQuery(""); setSearchOpen(true); }}
+            className="relative flex items-center gap-2 text-[16px] font-semibold text-white transition-colors hover:text-smu-gold-light"
+            aria-label="Search"
+            aria-expanded={searchOpen}
+          >
+            <span className="hidden sm:inline">Search</span>
+            <Search className="h-[18px] w-[18px]" strokeWidth={2.4} />
+          </button>
+          <span className="h-7 w-px bg-white/40" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => { setOpenGroup(null); setMenuOpen(true); }}
+            className="relative flex items-center gap-2 text-[16px] font-semibold text-white transition-colors hover:text-smu-gold-light"
+            aria-label="Open menu"
+            aria-expanded={menuOpen}
+            aria-controls="site-menu"
+          >
+            <span className="hidden sm:inline">Menu</span>
+            <span className="flex h-[14px] w-5 flex-col justify-between" aria-hidden="true">
+              <span className="h-[3px] w-5 rounded-sm bg-current" />
+              <span className="h-[3px] w-5 rounded-sm bg-current" />
+              <span className="h-[3px] w-5 rounded-sm bg-current" />
+            </span>
+          </button>
         </div>
       </header>
-      )}
 
       {menuOpen && (
         <div className="fixed inset-0 z-[80] flex justify-end" role="dialog" aria-modal="true" aria-label="Site menu">

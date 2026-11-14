@@ -53,18 +53,9 @@ export type ProgrammeMetric = {
   tone: "gold" | "navy" | "success";
 };
 
-/** One coffee scrub dispensed at the kiosk. */
-export type ScrubDispense = {
-  id: string;
-  at: string;
-  recipe: string;
-};
-
 export type BootstrapData = {
   bins: Bin[];
   events: BinEvent[];
-  /** Coffee scrubs dispensed at the kiosk, newest first. */
-  dispenses: ScrubDispense[];
   cleaners: Cleaner[];
   metrics: ProgrammeMetric[];
   /** When this snapshot was read from Postgres (not when the browser fetched it). */

@@ -1,6 +1,5 @@
 import { BIN_CAPACITY_KG } from "./bins";
-import { SCRUB_RECIPES, SCRUB_RECIPE_LABEL, type ScrubRecipe } from "./scrubs";
-import type { BinEvent, ScrubDispense } from "./types";
+import type { BinEvent } from "./types";
 
 const DAY = 86_400_000;
 
@@ -170,58 +169,4 @@ export function trendSeries(events: BinEvent[], range: Range, now: number): Tren
     points[i][key] = roundG(points[i][key] + e.kg);
   }
   return points;
-}
-
-/* ------------------------------------------------- coffee scrub dispenses -- */
-
-export function dispensesIn(dispenses: ScrubDispense[], w: Window): ScrubDispense[] {
-  return dispenses.filter((d) => {
-    const t = Date.parse(d.at);
-    return t >= w.from && t < w.to;
-  });
-}
-
-/** Scrubs dispensed since local midnight. */
-export function dispensesToday(dispenses: ScrubDispense[], now: number): number {
-  const midnight = new Date(now);
-  midnight.setHours(0, 0, 0, 0);
-  return dispenses.filter((d) => Date.parse(d.at) >= midnight.getTime()).length;
-}
-
-export type DispensePoint = { label: string; dispensed: number };
-
-/** Same buckets as `trendSeries`: daily for 7 and 30 days, weekly for the term. */
-export function dispenseTrend(dispenses: ScrubDispense[], range: Range, now: number): DispensePoint[] {
-  const weekly = range === "term";
-  const size = weekly ? 7 * DAY : DAY;
-  const count = Math.ceil(RANGES[range].days / (weekly ? 7 : 1));
-  const end = new Date(now);
-  end.setHours(24, 0, 0, 0);
-  const start = end.getTime() - count * size;
-  const points = Array.from({ length: count }, (_, i) => ({
-    label: new Date(start + i * size).toLocaleDateString("en-SG", {
-      day: "numeric",
-      month: "short",
-      ...(range === "7d" ? { weekday: "short" } : {}),
-    }),
-    dispensed: 0,
-  }));
-  for (const d of dispenses) {
-    const i = Math.floor((Date.parse(d.at) - start) / size);
-    if (i >= 0 && i < count) points[i].dispensed += 1;
-  }
-  return points;
-}
-
-export type RecipeCount = { recipe: ScrubRecipe; label: string; count: number };
-
-/** How often each recipe was chosen in the window, most chosen first. */
-export function recipeCounts(dispenses: ScrubDispense[], w: Window): RecipeCount[] {
-  const counts = new Map<string, number>();
-  for (const d of dispensesIn(dispenses, w)) counts.set(d.recipe, (counts.get(d.recipe) ?? 0) + 1);
-  return SCRUB_RECIPES.map((recipe) => ({
-    recipe,
-    label: SCRUB_RECIPE_LABEL[recipe],
-    count: counts.get(recipe) ?? 0,
-  })).sort((a, b) => b.count - a.count);
 }

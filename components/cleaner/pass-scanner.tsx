@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Camera, Check, Keyboard } from "lucide-react";
 import { BarcodeViewfinder, ScanTips } from "@/components/scanner/barcode-viewfinder";
 import { warmOcr } from "@/lib/client/scale-ocr";
-import { useStation, useStationMode } from "@/lib/client/station";
+import { useDemoMode, useStation } from "@/lib/client/station";
 import { useBootstrap } from "@/lib/client/use-bootstrap";
 import { useVisitKey } from "@/lib/client/use-visit-key";
 import { lookupBarcode, useBarcodeScanner } from "@/lib/client/use-barcode-scanner";
@@ -24,7 +24,7 @@ export function PassScanner() {
 
 function PassScannerVisit() {
   const router = useRouter();
-  const { base } = useStationMode();
+  const demo = useDemoMode();
   const station = useStation();
   const { data } = useBootstrap();
   const stationBin = data.bins.find((b) => b.id === station);
@@ -46,7 +46,7 @@ function PassScannerVisit() {
       const cleaner = match.cleaner;
       setVerified(cleaner);
       timer.current = window.setTimeout(
-        () => router.push(`${base}/building?cleaner=${cleaner.id}`),
+        () => router.push(`/cleaner/building?cleaner=${cleaner.id}`),
         1400,
       );
       return true;
@@ -216,13 +216,15 @@ function PassScannerVisit() {
             </div>
           )}
 
-          <p className="rounded border border-dashed border-black/20 px-4 py-3 text-[15px] leading-6 text-black/70">
-            No pass to hand? Show a{" "}
-            <Link href="/passes" target="_blank" className="text-link">
-              demo pass
-            </Link>{" "}
-            on a phone and hold it up to the camera.
-          </p>
+          {demo && (
+            <p className="rounded border border-dashed border-black/20 px-4 py-3 text-[15px] leading-6 text-black/70">
+              Demo: no pass to hand? Show a{" "}
+              <Link href="/passes" target="_blank" className="text-link">
+                demo pass
+              </Link>{" "}
+              on a phone and hold it up to the camera.
+            </p>
+          )}
         </div>
       </div>
     </CleanerShell>

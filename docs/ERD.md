@@ -44,12 +44,6 @@ erDiagram
         text photo
     }
 
-    SCRUB_DISPENSES {
-        text id PK
-        timestamptz at
-        text recipe "gentle, standard or moisturising"
-    }
-
     NEWS_ITEMS {
         text id PK
         text title
@@ -87,7 +81,6 @@ erDiagram
 | `bins` | Active | Seven building bins; current weight, capacity and pantry levels |
 | `cleaners` | Active | Demo staff roster and unique pass numbers |
 | `bin_events` | Active | Deposits and collections; the audit trail behind every weight |
-| `scrub_dispenses` | Active | One row per coffee scrub dispensed at the kiosk; time and recipe only. Added in migration `0004_scrub_dispenses.sql` |
 | `programme_metrics` | Active | Landing impact cards; seeded demo values |
 | `news_items` | Seeded, not surfaced | No current UI |
 | `programme_events` | Seeded, not surfaced | No current UI; some seeded dates are upcoming |
@@ -102,9 +95,7 @@ erDiagram
   `ocr`, `reference`, `manual` or `demo` while collection events leave it null.
 - `bin_events.bin_id` references `bins.id` with `ON DELETE CASCADE`; `bin_events.cleaner_id`
   references `cleaners.id` with `ON DELETE SET NULL`.
-- `scrub_dispenses.recipe` is `gentle`, `standard` or `moisturising`; the table has no foreign keys
-  and holds no personal data.
-- Indexes: `bin_events(bin_id, at desc)`, `bin_events(at desc)`, `scrub_dispenses(at desc)`.
+- Indexes: `bin_events(bin_id, at desc)`, `bin_events(at desc)`.
 - Weights are `numeric(7,3)` so stored values keep gram precision.
 
 The application writes a deposit and updates the bin in one transaction with a row lock. The history

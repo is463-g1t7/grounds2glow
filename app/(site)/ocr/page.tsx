@@ -99,12 +99,12 @@ export default function OcrPage() {
   return (
     <>
       <PageHeader
-        title="Demo: OCR reader"
+        title="OCR reader"
         lead="Upload a photo of a scale display, collection log or receipt and inspect the extracted text. This demo uses a sample OCR engine."
-        crumbs={[{ label: "Home", href: "/" }, { label: "Demo", href: "/demo" }, { label: "OCR reader" }]}
+        crumbs={[{ label: "Home", href: "/" }, { label: "Tools" }, { label: "OCR reader" }]}
         actions={
           <>
-            <Link href="/demo/scan" className="btn-smu btn-smu-outline">
+            <Link href="/scan" className="btn-smu btn-smu-outline">
               <ScanLine className="h-4 w-4" /> Scale scanner
             </Link>
             <Link href="/dashboard" className="btn-smu btn-smu-outline">

@@ -1,6 +1,5 @@
 "use client";
 
-import { SiteHeader } from "@/components/smu/site-header";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useEffect,
@@ -66,9 +65,6 @@ function Screen({ children, footer }: { children: ReactNode; footer?: ReactNode 
           <img src="/smu-logo-white.svg" alt="SMU" className="h-8 w-auto" />
           <span className="h-8 w-px bg-white/20" />
           <p className="font-display text-[20px] leading-6">Scale camera</p>
-          <span className="ml-auto">
-            <SiteHeader variant="bar" />
-          </span>
         </div>
       </header>
       <main className="flex flex-1 flex-col">{children}</main>

@@ -11,7 +11,6 @@ import { CollectConfirm, CollectionStatus } from "@/components/dashboard/collect
 import { BuildingDrilldown } from "@/components/dashboard/building-drilldown";
 import { ProductionSection } from "@/components/dashboard/production-section";
 import { RepurposedSection } from "@/components/dashboard/repurposed-section";
-import { ScrubSection } from "@/components/dashboard/scrub-section";
 import {
   RANGES,
   change,
@@ -62,7 +61,7 @@ export function DashboardClient() {
   const seenEvents = useRef<Set<string> | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
 
-  const { bins, events, dispenses, cleaners } = snapshot;
+  const { bins, events, cleaners } = snapshot;
   const now = useNow();
   const updatedLabel = updatedAt
     ? new Date(updatedAt).toLocaleTimeString("en-SG", { hour: "2-digit", minute: "2-digit" })
@@ -377,15 +376,6 @@ export function DashboardClient() {
           />
 
           <RepurposedSection bins={bins} events={events} range={range} window={w} rangeLabel={rangeLabel} now={now} />
-
-          <ScrubSection
-            dispenses={dispenses}
-            range={range}
-            window={w}
-            rangeLabel={rangeLabel}
-            periodLabel={periodLabel}
-            now={now}
-          />
         </div>
       </section>
 

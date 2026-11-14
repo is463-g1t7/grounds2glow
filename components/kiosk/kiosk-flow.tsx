@@ -1,6 +1,5 @@
 "use client";
 
-import { SiteHeader } from "@/components/smu/site-header";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -59,16 +58,6 @@ const recipes = {
 
 type RecipeKey = keyof typeof recipes;
 
-/** Tells the dashboard a scrub was dispensed. It never holds up the kiosk if the call fails. */
-function recordDispense(recipe: RecipeKey) {
-  void fetch("/api/dispense", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ recipe }),
-    keepalive: true,
-  }).catch(() => {});
-}
-
 export function KioskFlow() {
   const params = useSearchParams();
   const chatMode = params.get("chat") === "1";
@@ -93,14 +82,7 @@ export function KioskFlow() {
         {step === 2 && (
           <Guide name={name} onNext={() => setStep(3)} />
         )}
-        {step === 3 && (
-          <Recipe
-            onDispense={(recipe) => {
-              recordDispense(recipe);
-              setStep(4);
-            }}
-          />
-        )}
+        {step === 3 && <Recipe onDispense={() => setStep(4)} />}
         {step === 4 && <Dispensing onDone={() => setStep(5)} />}
         {step === 5 && <Thanks name={name} onRestart={restart} />}
       </div>
@@ -123,7 +105,6 @@ function KioskTopBar({ step, onHome }: { step: number; onHome: () => void }) {
         </span>
       </button>
 
-      <div className="flex items-center gap-5">
       {step > 0 && step < 4 && (
         <div className="flex items-center gap-4">
           <span className="hidden text-[12px] font-semibold text-smu-muted sm:block">
@@ -155,8 +136,6 @@ function KioskTopBar({ step, onHome }: { step: number; onHome: () => void }) {
       >
         Exit kiosk
       </Link>
-      <SiteHeader variant="bar" tone="light" />
-      </div>
     </header>
   );
 }
@@ -536,7 +515,7 @@ function Guide({ name, onNext }: { name: string; onNext: () => void }) {
   );
 }
 
-function Recipe({ onDispense }: { onDispense: (recipe: RecipeKey) => void }) {
+function Recipe({ onDispense }: { onDispense: () => void }) {
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeKey>("standard");
   const recipe = recipes[selectedRecipe];
   const ingredients = useMemo(
@@ -708,7 +687,7 @@ function Recipe({ onDispense }: { onDispense: (recipe: RecipeKey) => void }) {
           </div>
 
           <div className="mt-7 border-t border-black/8 pt-6 text-center">
-            <button type="button" onClick={() => onDispense(selectedRecipe)} className="btn-smu btn-smu-gold px-8 py-3 text-[15px]">
+            <button type="button" onClick={onDispense} className="btn-smu btn-smu-gold px-8 py-3 text-[15px]">
               Dispense coffee scrub <ArrowRight className="h-4 w-4" />
             </button>
           </div>
@@ -827,12 +806,9 @@ function KioskChatScreen() {
             </span>
           </span>
         </Link>
-        <div className="flex items-center gap-4">
-          <Link href="/kiosk" className="btn-smu btn-smu-outline btn-smu-sm">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to kiosk
-          </Link>
-          <SiteHeader variant="bar" tone="light" />
-        </div>
+        <Link href="/kiosk" className="btn-smu btn-smu-outline btn-smu-sm">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to kiosk
+        </Link>
       </header>
       <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-3 pb-3 pt-3 sm:px-4">
         <div className="mb-3 rounded-md bg-smu-navy p-5 text-white">
