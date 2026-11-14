@@ -1,12 +1,17 @@
-# SMU Circular Coffee
+# Grounds to Glow
 
-A working prototype of SMU's circular coffee loop. Pantry staff and cleaners weigh spent coffee
+A working prototype of Group 7's Grounds to Glow project. Pantry staff and cleaners weigh spent coffee
 grounds at a building bin, the reading lands on a live operations dashboard, and the Grounds to Glow
-kiosk turns grounds into a body scrub with an AI guide. Built for the IS463 demo.
+kiosk turns grounds into a body scrub with an AI guide.
 
 Stack: Next.js 16 (App Router) · React 19 · Postgres 18 + Drizzle · Tailwind CSS 4 · Bun.
 
-## Quick start
+# Access URLs
+
+Deployed url: https://grounds2glow.vercel.app/
+Local url: http://localhost:3000
+
+## Steps to run the prototype locally
 
 Requirements: Bun 1.4+ and Docker.
 
