@@ -101,6 +101,7 @@ const SEGMENT_RECTS: Record<string, readonly [number, number, number, number]> =
   f: [0, 1.9, 2.4, 9.2],
   g: [1.9, 10.8, 6.2, 2.4],
 };
+
 const LCD_INK = "#7d82ee";
 
 /**
@@ -657,46 +658,6 @@ function WeighStationVisit() {
     await readShot(next, image, binKg, live);
   }
 
-  /**
-   * Demo mode: plays the same find-the-display animation on the sample photo, then logs the
-   * weight the presenter chose instead of reading the photo. It's saved as a "demo" reading.
-   */
-  async function runDemo(addKg: number) {
-    const live = newRun();
-    clearResult();
-    setBeforeKg(binKg);
-    const total = Math.round((binKg + addKg) * 1000) / 1000;
-    const frame = SAMPLE_FRAMES[0];
-    const next: Shot = {
-      src: frame.src,
-      crop: null,
-      refKg: null,
-      lcd: frame.lcd,
-      photo: null,
-      source: "demo",
-      displayKg: total,
-    };
-    setShot(next);
-    setPhase("aligning");
-    const [image] = await Promise.all([loadImage(frame.src).catch(() => null), sleep(1200)]);
-    if (!live()) return;
-    if (!image) {
-      setError("The sample photo didn't load. Check the connection and try again.");
-      setPhase("failed");
-      return;
-    }
-    imageRef.current = image;
-    setSize(imageSize(image));
-    setPhase("locked");
-    await sleep(700);
-    if (!live()) return;
-    setPhase("captured");
-    await sleep(400);
-    if (!live()) return;
-    setRead(total);
-    await save(total, "demo", null);
-  }
-
   async function onUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -829,16 +790,12 @@ function WeighStationVisit() {
       </>
     );
   } else if (phase === "choose" && phoneSid) {
-  } else if (phase === "choose" && phoneSid) {
     panel = (
       <>
         <PanelTitle>Photograph the scale</PanelTitle>
-        <PanelTitle>Photograph the scale</PanelTitle>
         {justSwapped && <SwapReminder />}
         {notice && <Notice>{notice}</Notice>}
-        {notice && <Notice>{notice}</Notice>}
         <p className="cleaner-body">
-          Put the bin on the scale. The phone at the bin takes the photo, and the weight is logged
           Put the bin on the scale. The phone at the bin takes the photo, and the weight is logged
           automatically.
         </p>
@@ -924,63 +881,10 @@ function WeighStationVisit() {
             <ScanText className="h-5 w-5" /> Upload your own photo
           </button>
         </div>
-        {demoChips}
         {typeButton}
         <Link href="/cleaner/pair" className="text-link text-[15px]">
           <Smartphone className="h-4 w-4" /> Set up the phone camera
         </Link>
-      </>
-    );
-  } else if (phase === "remote") {
-    panel = (
-      <>
-        <PanelTitle>Taking the photo…</PanelTitle>
-        <p className="flex items-center gap-3 text-[17px] text-black/80" role="status">
-          <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-smu-gold" />
-          {remote === "sending"
-            ? "Asking the phone at the bin"
-            : remote === "capturing"
-              ? "The phone is counting down to the photo"
-              : `Waiting for the phone · ${elapsed}s`}
-        </p>
-        <p className="cleaner-body">Keep your hands clear of the scale until the photo is taken.</p>
-        {remoteSlow && (
-          <Notice>
-            The phone hasn&apos;t answered. Check its screen is on and its camera page says Ready.
-          </Notice>
-        )}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          {typeButton}
-          <button type="button" onClick={backToStart} className="cleaner-link text-black/70">
-            Cancel
-          </button>
-        </div>
-      </>
-    );
-  } else if (phase === "remote") {
-    panel = (
-      <>
-        <PanelTitle>Taking the photo…</PanelTitle>
-        <p className="flex items-center gap-3 text-[17px] text-black/80" role="status">
-          <span className="h-3 w-3 shrink-0 animate-pulse rounded-full bg-smu-gold" />
-          {remote === "sending"
-            ? "Asking the phone at the bin"
-            : remote === "capturing"
-              ? "The phone is counting down to the photo"
-              : `Waiting for the phone · ${elapsed}s`}
-        </p>
-        <p className="cleaner-body">Keep your hands clear of the scale until the photo is taken.</p>
-        {remoteSlow && (
-          <Notice>
-            The phone hasn&apos;t answered. Check its screen is on and its camera page says Ready.
-          </Notice>
-        )}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          {typeButton}
-          <button type="button" onClick={backToStart} className="cleaner-link text-black/70">
-            Cancel
-          </button>
-        </div>
       </>
     );
   } else if (phase === "remote") {
@@ -1214,7 +1118,6 @@ function WeighStationVisit() {
             <Truck className="h-5 w-5" /> {swapping ? "Logging swap…" : "I've swapped in an empty bin"}
           </button>
         </div>
-        {demoChips}
         {typeButton}
       </>
     );
@@ -1247,8 +1150,6 @@ function WeighStationVisit() {
                 onClick={retake}
                 className={`btn-smu cleaner-action ${shot ? "btn-smu-outline" : "btn-smu-gold"}`}
               >
-                <RefreshCw className="h-5 w-5" />{" "}
-                {fromPhone && !shot ? "Ask the phone again" : shot ? "Retake the photo" : "Choose another photo"}
                 <RefreshCw className="h-5 w-5" />{" "}
                 {fromPhone && !shot ? "Ask the phone again" : shot ? "Retake the photo" : "Choose another photo"}
               </button>
@@ -1309,30 +1210,10 @@ function WeighStationVisit() {
                   ? "Sample photo of the scale"
                   : "Photo of the scale"
           }
-          alt={
-            shot.source === "demo" && shot.displayKg != null
-              ? `Demo: the scale display reads ${shot.displayKg.toFixed(3)} kg`
-              : shot.source === "phone"
-                ? "Photo of the scale from the phone"
-                : shot.source !== "upload"
-                  ? "Sample photo of the scale"
-                  : "Photo of the scale"
-          }
           className={`block h-auto w-full transition-[filter,transform] duration-[1200ms] ease-out ${
             phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
           }`}
         />
-      )}
-
-      {shot.source === "demo" && shot.displayKg != null && shot.lcd && (
-        <div
-          aria-hidden
-          className={`pointer-events-none absolute inset-0 transition-[filter,transform] duration-[1200ms] ease-out ${
-            phase === "aligning" ? "scale-110 blur-[3px]" : "scale-100 blur-0"
-          }`}
-        >
-          <DemoDisplay lcd={shot.lcd} kg={shot.displayKg} />
-        </div>
       )}
 
       {shot.source === "demo" && shot.displayKg != null && shot.lcd && (
@@ -1386,12 +1267,6 @@ function WeighStationVisit() {
         </p>
       )}
 
-      {shot.source === "demo" && (
-        <p className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/65 px-3 py-2 text-[13px] text-white">
-          Demo reading · display set to {shot.displayKg?.toFixed(3)} kg
-        </p>
-      )}
-
       {phase === "captured" && <span className="shutter pointer-events-none absolute inset-0 bg-white" />}
     </div>
   ) : (
@@ -1408,9 +1283,6 @@ function WeighStationVisit() {
           ? "Weight typed by hand"
           : full && phase === "choose"
             ? "Swap the bin first"
-            : phase === "remote"
-              ? "The phone is taking the photo"
-              : "Waiting for a photo of the scale"}
             : phase === "remote"
               ? "The phone is taking the photo"
               : "Waiting for a photo of the scale"}
@@ -1435,7 +1307,6 @@ function WeighStationVisit() {
       cleaner={cleaner}
       where={`${bin.short} central bin`}
       idleMs={phase === "saved" ? SAVED_IDLE_MS : undefined}
-      pauseIdle={busy || phase === "remote" || phase === "saving"}
       pauseIdle={busy || phase === "remote" || phase === "saving"}
     >
       <div className="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
@@ -1489,34 +1360,6 @@ function SwapReminder() {
     >
       Bin swapped. Put the empty bin on the scale and press <strong>Z/T</strong>, then add the
       grounds.
-    </p>
-  );
-}
-
-function Notice({ children }: { children: ReactNode }) {
-  return (
-    <p
-      role="status"
-      className="rounded border border-smu-gold/40 bg-smu-cream-light px-4 py-3 text-[16px] leading-6 text-black/85"
-    >
-      {children}
-    </p>
-  );
-}
-
-/** Whether the paired phone is on, as of when this step opened. */
-function PhoneLine({ status }: { status: PairStatus | null }) {
-  if (!status) return null;
-  return (
-    <p className="flex items-center gap-2 text-[15px] text-black/70">
-      <span
-        aria-hidden
-        className={`h-2.5 w-2.5 rounded-full ${status.phoneOnline ? "bg-smu-success" : "bg-black/30"}`}
-      />
-      {status.phoneOnline ? "Phone camera is on" : "Phone camera isn't connected. Open its camera page."}
-      <Link href="/cleaner/pair" className="text-link ml-auto text-[14px]">
-        Setup
-      </Link>
     </p>
   );
 }
