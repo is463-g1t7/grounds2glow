@@ -63,7 +63,7 @@ route shells are prerendered where possible.
 | --- | --- | --- |
 | App Router pages | `app/**/page.tsx` | Route entry points for the site, cleaner flow and kiosk |
 | Web UI components | `components/**` | SMU chrome, landing sections, dashboard, cleaner station, kiosk, AI elements |
-| Client hooks | `lib/client/**` | Camera, barcode scanner, QR generation, scale OCR, bootstrap polling, station state |
+| Client hooks | `lib/client/**` | Camera, barcode scanner, QR generation, scale OCR, bootstrap polling, station setup and live/demo mode (`useStationMode`) |
 | API route handlers | `app/api/**/route.ts` | Validation and HTTP boundary for all reads and writes |
 | Domain services | `lib/queries.ts`, `lib/bins.ts`, `lib/analytics.ts`, `lib/scale-reading.ts`, `lib/ocr.ts`, `lib/openrouter.ts` | Business rules, calculations, OCR and chat integration |
 | Data access | `lib/db.ts`, `db/schema.ts` | Lazy pool creation, Drizzle client and schema |
@@ -77,9 +77,11 @@ route shells are prerendered where possible.
    typed pass number. `POST /api/barcode/resolve` looks up `cleaners.pass`.
 2. `/cleaner/building` shows the building's pantry levels. The station bin is remembered in
    `localStorage` after a one-time `?station=<bin-id>` setup.
-3. `/cleaner/weigh` obtains a scale photo: sample frame, uploaded image or typed weight. The browser
-   crops and downscales the photo, then `POST /api/ocr/scale` sends it to the OCR Space and parses the
-   reading with `lib/scale-reading.ts`.
+3. `/cleaner/weigh` obtains a scale photo: from the paired phone camera (section 4.7), an uploaded
+   image, or a typed weight. The demo station (`/demo/cleaner/weigh`, section 4.8) uses a sample
+   frame instead of a phone. The browser crops and downscales the photo, then
+   `POST /api/ocr/scale` sends it to the OCR Space and parses the reading with
+   `lib/scale-reading.ts`.
 4. `POST /api/readings` calls `createReading()`. Inside one transaction it locks the bin row
    (`SELECT ... FOR UPDATE`), clamps `afterKg` to `[0, capacity_kg]`, rejects a reading that is not
    above the current total, stores a `deposit` event with `before_kg`/`after_kg`, and updates the bin
@@ -93,7 +95,7 @@ The dashboard sends `POST /api/collect`. `collectBin()` locks the bin, rejects a
 
 ### 4.3 Live dashboard and landing page
 
-`GET /api/bootstrap` returns bins, events (capped at 1,000), cleaners and metrics. The landing page
+`GET /api/bootstrap` returns bins, events (capped at 1,000), coffee scrub dispenses (capped at 3,000), cleaners and metrics. The landing page
 polls it every four seconds for the live demo. The dashboard does not poll: it fetches on open,
 refreshes when the tab regains focus, and has an explicit Refresh button that adds `?refresh=1` to
 bypass the cache. Both show the snapshot's `updatedAt` time.
@@ -137,21 +139,87 @@ A sleeping Hugging Face Space takes time to wake. The route allows 60 seconds, t
 every 8 seconds for up to 120 seconds on a `503 waking` response, and `/api/ocr/warm` starts the
 Space when the cleaner reaches the check-in page. The Space sleeps after two days without use.
 
-`/scan` and `/ocr` are demo tools and use the simulated OCR in `lib/demo-ocr.ts`; they are not the
+`/demo/scan` and `/demo/ocr` are demo tools (the old `/scan` and `/ocr` URLs redirect to them) and use the simulated OCR in `lib/demo-ocr.ts`; they are not the
 cleaner weigh path.
 
 ### 4.6 Demo controls
 
 `NEXT_PUBLIC_DEMO_CONTROLS=true` exposes Reset, Sync and Simulate in the UI and enables their routes.
 Otherwise `POST /api/reset`, `POST /api/sync` and `POST /api/simulate` return 403. Reset reseeds the
-database from `scripts/seed.ts`; Sync inserts one random reading; Simulate inserts a reading and
+database (bins, events and about 30 days of sample scrub dispenses) from `scripts/seed.ts`; Sync inserts one random reading; Simulate inserts a reading and
 auto-collects the oldest full bin when two bins are full.
+
+### 4.7 Phone camera (live station only)
+
+A phone on a stand at the bin photographs the scale for the laptop. Both run the same Vercel
+deployment.
+
+1. **Pairing (once).** `/cleaner/pair` on the laptop calls `POST /api/capture/pair` and shows a
+   six-digit code and a QR code. The phone opens `/cleaner/camera` (the QR code fills the code in)
+   and calls `POST /api/capture/join`. Both devices then hold the same random session secret in
+   `localStorage` and send it as `x-capture-session`. Codes last 10 minutes, work once, and joining
+   locks for an address after 20 wrong codes. Sessions last 7 days after the last capture.
+2. **Trigger.** Picking a level opens `/cleaner/weigh`, which posts a capture job
+   (`POST /api/capture/job`) when a phone is paired.
+3. **Capture.** The phone checks `GET /api/capture/phone` every 1.2 s (every fifth check is also a
+   heartbeat). It claims the job, counts down 3 s, grabs a frame, posts a preview JPEG
+   (`captured`), runs `/api/ocr/scale` on the framed area, and posts the lines and reading
+   (`result`), or `failed`.
+4. **Save.** The laptop polls `GET /api/capture/job?id=` every second, shows the preview, then runs
+   the same checks as any other photo and saves through `POST /api/readings`. The photo is not
+   stored (`photo: null`).
+
+Vercel functions can't hold connections open, so both sides poll. Jobs live in Upstash Redis under
+`smu-circular-coffee:capture:v1:*` with TTLs (3 minutes per job); nothing touches Postgres until the
+laptop saves. Without Redis, a local dev server uses an in-memory store; on Vercel the relay returns
+503 instead, since memory isn't shared between function instances. The phone pauses after 15 idle
+minutes and stops polling while its page is hidden, to keep within Upstash's free command quota.
+
+### 4.8 Live and demo stations
+
+The same cleaner screens serve two stations, and the URL decides which:
+
+| | Live `/cleaner/*` | Demo `/demo/cleaner/*` |
+| --- | --- | --- |
+| Photo source | Paired phone, uploaded image or typed weight | Sample photo (read by real OCR on an empty bin), uploaded image or typed weight |
+| Bin already holds grounds | Reads the real display | The sample adds its 129 g on top; the sample display shows the new total |
+| Phone pairing | Yes (section 4.7) | Never; any existing pairing is ignored |
+| Reading `source` | `ocr`, `manual` | `demo`, plus `ocr`/`manual` for uploaded or typed weights |
+| Marker | Green "Live" pill | Gold "Demo" pill |
+
+`app/demo/cleaner/**` re-exports the pages in `app/cleaner/**`. Components call `useStationMode()`
+(`lib/client/station.ts`), which reads the pathname and returns `{ demo, base }`, so every link in a
+demo screen stays under `/demo/cleaner`. Nothing is stored in `localStorage` for the mode.
+`/demo/scan` and `/demo/ocr` (formerly `/scan` and `/ocr`, which redirect via `next.config.ts`) are
+simulated tools; `/demo` explains the split, and `/passes` serves both stations.
+
+**Menu on every page.** `SiteHeader` renders the fixed header on the main pages. With
+`variant="bar"` it renders only the Menu button, used in the top bars of the cleaner station
+(`CleanerShell`), the kiosk (including `?chat=1`) and the phone camera page, and it opens the same
+menu drawer.
+
+### 4.9 Coffee scrubs dispensed
+
+1. On the kiosk, pressing "Dispense coffee scrub" in `components/kiosk/kiosk-flow.tsx` calls
+   `POST /api/dispense` with `{ recipe }` (`gentle`, `standard` or `moisturising`, from
+   `lib/scrubs.ts`). The call is fire-and-forget with `keepalive`, so a failure never blocks the
+   person at the kiosk.
+2. The route validates the recipe (400 otherwise), inserts a `scrub_dispenses` row through
+   `createDispense()` and deletes the bootstrap cache key.
+3. `GET /api/bootstrap` returns the newest 3,000 rows as `dispenses`.
+4. `components/dashboard/scrub-section.tsx` computes the count in the selected range, the change
+   against the previous period, today's count, the most chosen recipe, a per-day (per-week for Term)
+   chart and the recipe split, using `dispensesIn`, `dispenseTrend` and `recipeCounts` in
+   `lib/analytics.ts`.
+
+A row holds only an id, a time and a recipe. It stores no name or ID, so the dashboard counts
+people without identifying them.
 
 ## 5. Data model
 
 The full Mermaid ERD, table status and constraints are in [ERD.md](ERD.md). The active tables are
-`bins`, `cleaners`, `bin_events` and `programme_metrics`. `news_items` and `programme_events` are
-seeded but no longer surfaced. The legacy marketplace tables `listings` and `claims` were dropped in
+`bins`, `cleaners`, `bin_events`, `scrub_dispenses` and `programme_metrics`. `news_items` and `programme_events` are
+seeded but no longer surfaced. `scrub_dispenses` is added by migration `0004_scrub_dispenses.sql`. The legacy marketplace tables `listings` and `claims` were dropped in
 migration `0003_optimal_mole_man.sql`.
 
 Two application rules are worth calling out here:
@@ -170,6 +238,11 @@ Two application rules are worth calling out here:
 | `/api/ocr/scale` | POST | Read a scale display with PaddleOCR | — |
 | `/api/ocr/warm` | POST | Start waking the OCR Space | — |
 | `/api/readings` | POST | Record a deposit and update the bin | — |
+| `/api/dispense` | POST | Record one coffee scrub dispensed at the kiosk (`{ recipe }`) | — |
+| `/api/capture/pair` | POST, GET, DELETE | Laptop: pairing code, phone status, unpair | Capture session (GET, DELETE) |
+| `/api/capture/join` | POST | Phone: trade a pairing code for the session | Code, 20 wrong tries per address |
+| `/api/capture/job` | POST, GET, DELETE | Laptop: ask the phone for a photo, poll, cancel | Capture session |
+| `/api/capture/phone` | GET, POST | Phone: check for a job, claim, report photo/result | Capture session |
 | `/api/collect` | POST | Empty a bin and write an audit event | — |
 | `/api/sync` | POST | Insert one simulated remote reading | Demo controls |
 | `/api/simulate` | POST | One demo live-day step, including auto-collect | Demo controls |
@@ -302,7 +375,7 @@ to be re-checked before it is quoted externally.
   read the load cell directly and remove cloud OCR entirely; until then, warm the Space only when a
   cleaner is actually at the station. The current timeout also does not abort the underlying Gradio
   request, so a timed-out attempt can keep running while the retry starts.
-- **Open endpoints.** `/api/ocr/*`, `/api/readings` and `/api/collect` can be called by anyone who
+- **Open endpoints.** `/api/ocr/*`, `/api/readings`, `/api/dispense` and `/api/collect` can be called by anyone who
   finds the URL. Spam requests waste Hugging Face quota, database work and energy. Add a shared
   secret or a rate limiter before exposing the demo beyond the assessment.
 - **Answer-cache observability.** The LLM answer cache is keyed by a hash of the normalized prompt

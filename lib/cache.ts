@@ -11,9 +11,10 @@ import { Redis } from "@upstash/redis";
 const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
 
-const redis = url && token ? new Redis({ url, token }) : null;
+/** Shared with the phone camera relay (lib/capture.ts). */
+export const redis = url && token ? new Redis({ url, token }) : null;
 
-const BOOTSTRAP_KEY = "smu-circular-coffee:bootstrap:v1";
+const BOOTSTRAP_KEY = "smu-circular-coffee:bootstrap:v2";
 /** Short enough that live demo data is never far behind, long enough to absorb polls. */
 const BOOTSTRAP_TTL_SECONDS = 15;
 

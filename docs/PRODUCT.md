@@ -17,7 +17,8 @@ facilities teams watching the bins, and SMU students and staff using the Grounds
 SMU Circular Coffee follows spent coffee grounds through one loop: pantry staff weigh each drop-off,
 the station camera reads the scale and sends the reading to a live dashboard, and the Grounds to Glow
 kiosk turns grounds into a body scrub with an AI guide on hand. Success on demo day is an assessor
-completing that loop themselves, and seeing their reading arrive on the page.
+completing that loop themselves, and seeing their reading arrive on the page. The dashboard also
+counts how many people dispense a coffee scrub at the kiosk, so the loop is closed end to end.
 
 ## Brand personality
 
@@ -37,6 +38,8 @@ should make people want to try the thing rather than read about it.
 3. Every section ends in something to try.
 4. Keep the SMU identity: Oswald and Libre Franklin, navy, gold and limestone, angled planes.
 5. Claim only what can be backed up. No invented figures or "verified" badges.
+6. Keep real and simulated apart. The live station only shows real readings; anything that stands
+   in for hardware lives under `/demo`, is labelled, and is saved as a demo reading.
 
 ## Accessibility and inclusion
 
