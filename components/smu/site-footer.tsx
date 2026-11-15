@@ -49,10 +49,10 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
-                <Link href="/scan"
+                <Link href="/cleaner"
                   className="inline-flex items-center gap-1.5 text-[14px] leading-[21px] text-white/80 transition-colors hover:text-white"
                 >
-                  Scale scanner
+                  Smart bin interface
                   <ArrowUpRight className="h-3.5 w-3.5 text-white/55" />
                 </Link>
               </li>

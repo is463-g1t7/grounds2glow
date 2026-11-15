@@ -1,11 +1,14 @@
 import "server-only";
-import { asc, desc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { COLLECTOR_LABEL } from "./bins";
+import { DISPENSE_DESCRIPTION, DISPENSE_VENUE, dispenseTimestamp, singaporeDay } from "./scrubs";
 import {
   binEvents,
   bins,
   cleaners,
+  programmeEvents,
   programmeMetrics,
 } from "@/db/schema";
 import type {
@@ -16,6 +19,7 @@ import type {
   Cleaner,
   EventSource,
   ProgrammeMetric,
+  ScrubDispense,
 } from "./types";
 
 const num = (v: string | number | null) => Number(v ?? 0);
@@ -108,17 +112,51 @@ export async function getMetrics(): Promise<ProgrammeMetric[]> {
 
 /** The dashboard analytics cap the history they need; this keeps the payload bounded. */
 const BOOTSTRAP_EVENT_LIMIT = 1000;
+const BOOTSTRAP_DISPENSE_LIMIT = 3000;
+
+export async function getDispenses(limit: number): Promise<ScrubDispense[]> {
+  const rows = await getDb()
+    .select({ id: programmeEvents.id, recipe: programmeEvents.title, day: programmeEvents.eventDate })
+    .from(programmeEvents)
+    .where(
+      and(
+        eq(programmeEvents.venue, DISPENSE_VENUE),
+        eq(programmeEvents.description, DISPENSE_DESCRIPTION)
+      )
+    )
+    .orderBy(desc(programmeEvents.eventDate), desc(programmeEvents.id))
+    .limit(limit);
+  return rows.map((r) => ({ id: r.id, at: dispenseTimestamp(r.day), recipe: r.recipe }));
+}
+
+/** Records one scrub dispensed at the kiosk. */
+export async function createDispense(recipe: string): Promise<ScrubDispense> {
+  const id = randomUUID();
+  const day = singaporeDay(new Date());
+  await getDb().insert(programmeEvents).values({
+    id,
+    title: recipe,
+    eventDate: day,
+    venue: DISPENSE_VENUE,
+    description: DISPENSE_DESCRIPTION,
+    image: "",
+  });
+  return { id, at: dispenseTimestamp(day), recipe };
+}
 
 export async function getBootstrap(): Promise<BootstrapData> {
-  const [binRows, events, cleanerRows, metrics] = await Promise.all([
+  const [binRows, events, dispenses, cleanerRows, metrics] = await Promise.all([
     getBins(),
     getEvents(BOOTSTRAP_EVENT_LIMIT),
+    // Optional section: if this ever fails, the rest of the dashboard must still load.
+    getDispenses(BOOTSTRAP_DISPENSE_LIMIT).catch(() => [] as ScrubDispense[]),
     getCleaners(),
     getMetrics(),
   ]);
   return {
     bins: binRows,
     events,
+    dispenses,
     cleaners: cleanerRows,
     metrics,
   };

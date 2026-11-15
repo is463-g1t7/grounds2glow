@@ -1,8 +1,8 @@
 # Grounds to Glow
 
-A working prototype of Group 7's Grounds to Glow project. Pantry staff and cleaners weigh spent coffee
+A working prototype of SMU's Grounds to Glow project. Pantry staff and cleaners weigh spent coffee
 grounds at a building bin, the reading lands on a live operations dashboard, and the Grounds to Glow
-kiosk turns grounds into a body scrub with an AI guide.
+kiosk turns grounds into a body scrub with an AI guide. Built for the IS463 demo.
 
 Stack: Next.js 16 (App Router) · React 19 · Postgres 18 + Drizzle · Tailwind CSS 4 · Bun.
 
@@ -25,24 +25,28 @@ bun run dev
 ```
 
 Open http://localhost:3000. The Docker database listens on **localhost:55432** and keeps its data in
-the `smu_pgdata` volume.
+the `smu_pgdata` volume. `db:seed` loads the sample bins, readings and coffee-scrub dispenses.
+
+On Windows, if Docker says the port is forbidden ("An attempt was made to access a socket in a way
+forbidden by its access permissions"), the port sits in a range Windows has reserved. See
+[Deployment](docs/DEPLOYMENT.md) troubleshooting.
 
 ## Routes to try
 
 | Route | What it shows |
 | --- | --- |
 | `/` | Landing page: intro and three-stage loop, live bins, dashboard and kiosk chat |
-| `/dashboard` | Live operations, collection status and programme reporting |
-| `/cleaner` | Cleaner check-in by staff-pass barcode (or typed pass) |
-| `/cleaner/building` | Pantry-level picker for the cleaner's building |
-| `/cleaner/weigh` | Weigh station: sample, upload or typed weight with real OCR |
-| `/kiosk` | Grounds to Glow kiosk; add `?chat=1` for the mobile chat |
-| `/passes` | Printable demo staff passes |
-| `/scan` | Scale scanner demo: sample or upload a display photo (simulated OCR) and deposit |
-| `/ocr` | Demo OCR tool (simulated OCR) |
-
-Cleaner stations remember their setup in the browser: `?station=<bin-id>` (or `none`), `?scale=g` for
-a gram scale, and `?demo=1`/`?demo=0` for demo states. See `docs/DEMO.md` for the recording script.
+| `/dashboard` | Live operations, collection status, programme reporting and coffee scrubs dispensed |
+| `/cleaner` | **Live** smart bin station: check in by staff-pass barcode (or typed pass) |
+| `/cleaner/building` | Live: pantry-level picker for the cleaner's building |
+| `/cleaner/weigh` | Live: photograph the scale (phone, upload) or type the weight, read by real OCR |
+| `/cleaner/pair`, `/cleaner/camera` | Live only: pair a phone camera with the laptop (`pair`), and the phone's side (`camera`) |
+| `/kiosk` | Grounds to Glow kiosk; each dispensed scrub is counted on the dashboard. Add `?chat=1` for the mobile chat |
+| `/passes` | Demo staff passes (work at either station); linked from both check-in screens |
+| `/demo` | Explains live vs demo and links to everything below |
+| `/demo/cleaner/*` | **Demo** station: the same screens, reading a sample scale photo. No phone pairing |
+| `/demo/scan` | **Demo** scale scanner: simulated, posts a sample reading |
+| `/demo/ocr` | **Demo** OCR reader: simulated, saves nothing |
 
 ## Configuration and scripts
 
@@ -50,8 +54,8 @@ Local defaults live in `.env.local.example`. The full environment matrix and eve
 are in [Deployment](docs/DEPLOYMENT.md). In short, `bun run db:up`, `db:migrate`, `db:seed` and
 `db:check` manage the Docker database, while `bun run dev`, `build`, `start` and `lint` run the app.
 
-`NEXT_PUBLIC_DEMO_CONTROLS=true` exposes Reset, Sync, Simulate, demo states and the OCR pipeline
-readout. Leave it unset on shared deployments: anyone who can reach the site could otherwise reset
+`NEXT_PUBLIC_DEMO_CONTROLS=true` exposes the dashboard's Reset, Sync and Simulate buttons. It no longer
+affects the cleaner station, which is live or demo by URL only. Leave it unset on shared deployments: anyone who can reach the site could otherwise reset
 the shared demo data and destroy readings collected during the demo.
 
 The dashboard cache is optional. If `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are
@@ -68,8 +72,8 @@ bun run build
 curl http://localhost:3000/api/bootstrap
 ```
 
-The cleaner weigh step calls the PaddleOCR Space on Hugging Face; `/scan` and `/ocr` still use
-simulated OCR. When `OPENROUTER_API_KEY` is missing, pre-written guidance still answers matching
+The live cleaner weigh step calls the PaddleOCR Space on Hugging Face; `/demo/scan` and `/demo/ocr`
+use simulated OCR. When `OPENROUTER_API_KEY` is missing, pre-written guidance still answers matching
 kiosk questions; unmatched questions show the offline message.
 
 ## Documentation
@@ -80,6 +84,5 @@ kiosk questions; unmatched questions show the offline message.
 - [C4 diagrams](docs/diagrams/) — draw.io sources with rendered PNG/SVG
 - [Product](docs/PRODUCT.md) — users, purpose and product principles
 - [Design system](docs/DESIGN.md) — SMU tokens, type, layout and components
-- [Demo script](docs/DEMO.md) — narrated cleaner-flow walkthrough
 - [Feature parity archive](docs/archive/FEATURE-PARITY.md) — historical Vite-port audit
 - [SMU reference](docs/reference/SMU-REFERENCE.md) — design provenance and source links
