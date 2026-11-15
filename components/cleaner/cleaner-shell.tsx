@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOut, X } from "lucide-react";
-import { applyStationParams, setDemoMode, useDemoMode } from "@/lib/client/station";
+import { LogOut } from "lucide-react";
+import { applyStationParams, useStationMode } from "@/lib/client/station";
+import { SiteHeader } from "@/components/smu/site-header";
 import type { Cleaner } from "@/lib/types";
 
 const STEPS = ["Scan pass", "Choose pantry", "Weigh"] as const;
@@ -33,14 +34,14 @@ export function CleanerShell({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const demo = useDemoMode();
+  const { demo, base } = useStationMode();
 
   useEffect(() => {
     applyStationParams();
   }, []);
 
   const secondsLeft = useIdleSignOut(Boolean(cleaner) && !pauseIdle, idleMs, () =>
-    router.push("/cleaner"),
+    router.push(base),
   );
 
   return (
@@ -65,17 +66,19 @@ export function CleanerShell({
           {step ? <Steps step={step} /> : <span className="flex-1" />}
 
           <div className="ml-auto flex items-center gap-3">
-            {demo && (
-              <button
-                type="button"
-                onClick={() => setDemoMode(false)}
-                aria-label="Turn off demo mode"
-                title="Turn off demo mode"
-                className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-smu-gold-light/60 py-1 pl-3 pr-2 text-[13px] font-semibold text-smu-gold-light transition-colors hover:bg-white/10"
-              >
-                Demo<span className="max-sm:hidden"> mode</span> <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+            <span
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full border py-1 px-3 text-[13px] font-semibold ${
+                demo
+                  ? "border-smu-gold-light/60 text-smu-gold-light"
+                  : "border-white/30 text-white/85"
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`h-2 w-2 rounded-full ${demo ? "bg-smu-gold-light" : "bg-smu-success"}`}
+              />
+              {demo ? "Demo" : "Live"}
+            </span>
             {cleaner && (
               <>
                 <span className="flex items-center gap-2.5">
@@ -89,14 +92,16 @@ export function CleanerShell({
                     {cleaner.name}
                   </span>
                 </span>
+                <SiteHeader variant="bar" />
                 <Link
-                  href="/cleaner"
-                  className="flex h-10 items-center gap-2 whitespace-nowrap rounded border border-white/40 px-3 text-[14px] font-semibold transition-colors hover:bg-white hover:text-smu-navy"
+                  href={base}
+                  className="flex h-10 items-center gap-2 whitespace-nowrap rounded px-2 text-[14px] font-semibold text-white/85 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   <LogOut className="h-4 w-4" /> Sign out
                 </Link>
               </>
             )}
+            {!cleaner && <SiteHeader variant="bar" />}
           </div>
         </div>
       </header>
@@ -214,13 +219,14 @@ export function Panel({ className = "", children }: { className?: string; childr
 }
 
 export function NeedsPass() {
+  const { base } = useStationMode();
   return (
     <Panel className="max-w-xl p-6">
       <h1 className="font-display text-[30px] leading-9 text-smu-navy">Scan your staff pass first</h1>
       <p className="mt-2 text-[16px] leading-6 text-smu-muted">
         Every drop-off is logged against the cleaner who made it.
       </p>
-      <Link href="/cleaner" className="btn-smu btn-smu-gold mt-5">
+      <Link href={base} className="btn-smu btn-smu-gold mt-5">
         Go to pass scanner
       </Link>
     </Panel>

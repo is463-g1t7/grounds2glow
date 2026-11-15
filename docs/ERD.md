@@ -83,7 +83,7 @@ erDiagram
 | `bin_events` | Active | Deposits and collections; the audit trail behind every weight |
 | `programme_metrics` | Active | Landing impact cards; seeded demo values |
 | `news_items` | Seeded, not surfaced | No current UI |
-| `programme_events` | Seeded, not surfaced | No current UI; some seeded dates are upcoming |
+| `programme_events` | Active (reused) | Seeded events have no UI. Also holds coffee scrubs dispensed at the kiosk: one row each, recipe in `title`, day in `event_date`, `venue` = "Grounds to Glow kiosk", `description` = "Coffee scrub dispensed". No schema change |
 | `listings` | Dropped | Removed marketplace; dropped in migration `0003_optimal_mole_man.sql` |
 | `claims` | Dropped | Removed marketplace; dropped in migration `0003_optimal_mole_man.sql` |
 

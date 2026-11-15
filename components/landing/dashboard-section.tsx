@@ -99,10 +99,10 @@ export function DashboardSection({
               Open the live dashboard
             </Link>
             <Link
-              href="/scan"
+              href="/demo/scan"
               className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-white transition-colors hover:text-smu-gold-light"
             >
-              Try the scale scanner <ArrowRight aria-hidden="true" className="h-4 w-4" />
+              Try the demo scanner <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </Link>
           </div>
         </div>
